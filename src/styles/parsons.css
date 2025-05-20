@@ -1,0 +1,100 @@
+/* Parsons Widget CSS */
+
+/* Container styling */
+.parsons-puzzle-container {
+  background-color: #f9fafb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+/* Trash area styling */
+.trash-container {
+  margin-bottom: 1.5rem;
+  padding: 0.75rem;
+  border: 2px dashed #d1d5db;
+  border-radius: 0.5rem;
+  min-height: 3rem;
+  position: relative;
+}
+
+.trash-container:before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* Sortable area styling */
+.sortable-container {
+  padding: 0.75rem;
+  border: 2px solid #d1d5db;
+  border-radius: 0.5rem;
+  min-height: 10rem;
+  background-color: #ffffff;
+  position: relative;
+}
+
+.sortable-container:before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* Styling for code blocks */
+#ul-parsons-sortable, 
+#ul-parsons-trash {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  min-height: 2rem;
+}
+
+#ul-parsons-sortable li, 
+#ul-parsons-trash li {
+  margin: 0.25rem 0;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  background-color: #f3f4f6;
+  cursor: move;
+  font-family: monospace;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+#ul-parsons-sortable li:hover, 
+#ul-parsons-trash li:hover {
+  background-color: #e5e7eb;
+}
+
+/* Feedback styling */
+#ul-parsons-sortable.correct {
+  border: 2px solid #10b981;
+  background-color: #ecfdf5;
+}
+
+.incorrectPosition {
+  background-color: #fee2e2 !important;
+  border-color: #ef4444 !important;
+}
+
+.incorrectIndent {
+  border-left: 4px solid #ef4444 !important;
+}
+
+.correctPosition {
+  background-color: #d1fae5 !important;
+  border-color: #10b981 !important;
+}
+
+/* Feedback colors */
+.bg-parsons-correct {
+  background-color: #d1fae5;
+}
+
+.bg-parsons-incorrect {
+  background-color: #fee2e2;
+}

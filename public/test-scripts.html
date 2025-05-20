@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Script Test</title>
+</head>
+<body>
+  <h1>Script Test</h1>
+  <p>This page tests if Parsons scripts are accessible.</p>
+  
+  <script>
+    function testScript(url) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = url;
+        script.onload = () => resolve(true);
+        script.onerror = () => reject(false);
+        document.body.appendChild(script);
+      });
+    }
+
+    async function runTests() {
+      const results = document.getElementById('results');
+      
+      try {
+        await testScript('/js/hammer.min.js');
+        results.innerHTML += '<div style="color: green;">✓ hammer.min.js loaded</div>';
+      } catch (e) {
+        results.innerHTML += '<div style="color: red;">✗ hammer.min.js failed to load</div>';
+      }
+      
+      try {
+        await testScript('/js/lis.js');
+        results.innerHTML += '<div style="color: green;">✓ lis.js loaded</div>';
+      } catch (e) {
+        results.innerHTML += '<div style="color: red;">✗ lis.js failed to load</div>';
+      }
+      
+      try {
+        await testScript('/js/parsons.js');
+        results.innerHTML += '<div style="color: green;">✓ parsons.js loaded</div>';
+      } catch (e) {
+        results.innerHTML += '<div style="color: red;">✗ parsons.js failed to load</div>';
+      }
+      
+      try {
+        await testScript('/js/prettify.js');
+        results.innerHTML += '<div style="color: green;">✓ prettify.js loaded</div>';
+      } catch (e) {
+        results.innerHTML += '<div style="color: red;">✗ prettify.js failed to load</div>';
+      }
+    }
+  </script>
+  
+  <div id="results"></div>
+  <button onclick="runTests()">Test Scripts</button>
+</body>
+</html>
