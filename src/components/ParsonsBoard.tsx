@@ -19,39 +19,32 @@ const ParsonsBoard: React.FC = () => {
   const [sortableBlocks, setSortableBlocks] = useState<BlockItem[]>([]);
   const [trashBlocks, setTrashBlocks] = useState<BlockItem[]>([]);
   const [draggedItem, setDraggedItem] = useState<BlockItem | null>(null);
+  const [mounted, setMounted] = useState(false);
   
   // Initialize blocks from the current problem
   useEffect(() => {
     if (!currentProblem) return;
-    
+
+    // Only run on the client
     const lines = currentProblem.initial.split('\n').filter(line => line.trim());
-    
     const initialBlocks = lines.map((line, index) => {
-      // Detect if the line is a distractor
       const isDistractor = line.includes('#distractor');
       const cleanLine = isDistractor ? line.replace(/#distractor\s*$/, '') : line;
-      
-      // Calculate initial indentation level
-      const indentMatch = cleanLine.match(/^\s*/);
-      const indentLevel = indentMatch ? Math.floor(indentMatch[0].length / 4) : 0;
-      
       return {
         id: `block-${index}`,
         text: cleanLine.trimStart(),
-        indentation: 0, // Start with zero indentation
+        indentation: 0,
         isDistractor
       };
     });
-    
-    // Shuffle the blocks
+
+    // Shuffle only on the client
     const shuffledBlocks = [...initialBlocks].sort(() => Math.random() - 0.5);
-    
+
     if (currentProblem.options.trashId) {
-      // If trash is enabled, place blocks in trash area initially
       setSortableBlocks([]);
       setTrashBlocks([...shuffledBlocks]);
     } else {
-      // If no trash, all blocks go to sortable area
       setSortableBlocks([...shuffledBlocks]);
       setTrashBlocks([]);
     }
@@ -178,6 +171,10 @@ const ParsonsBoard: React.FC = () => {
     updateSolution(updatedBlocks);
   };
   
+  /*
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null; // or a loading spinner
+  */
   return (
     <div className="flex flex-col md:flex-row gap-4 w-full">
       {/* Trash area */}
