@@ -1,3 +1,4 @@
+// src/lib/api.ts
 import axios from 'axios';
 import { ParsonsSettings } from '@/@types/types';
 
@@ -21,6 +22,27 @@ export const fetchProblems = async () => {
 };
 
 export const fetchProblemById = async (id: string) => {
+  // Demo mode for local development
+  if (id === 'demo-problem-1') {
+    return {
+      id: 'demo-problem-1',
+      title: 'Demo: Print Even Numbers',
+      description: 'Arrange the code blocks to print all even numbers from 1 to 10.',
+      parsonsSettings: {
+        initial: "start = 1\nend = 10\nfor i in range(start, end + 1):\n    if i % 2 == 0:\n        print(i)",
+        options: {
+          sortableId: 'sortable',
+          trashId: 'sortableTrash',
+          max_wrong_lines: 3,
+          can_indent: true,
+          grader: 'ParsonsWidget._graders.LineBasedGrader',
+          exec_limit: 2500,
+          show_feedback: true
+        }
+      }
+    };
+  }
+  
   try {
     const response = await apiClient.get(`/api/problems/${id}`);
     return response.data;

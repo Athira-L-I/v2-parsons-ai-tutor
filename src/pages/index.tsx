@@ -1,115 +1,181 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+import React, { useState } from 'react';
+import { NextPage } from 'next';
+import Link from 'next/link';
+import ParsonsProblemContainer from '@/components/ParsonsProblemContainer';
+import { ParsonsGrader } from '@/@types/types';
+import { useParsonsContext } from '@/contexts/ParsonsContext';
+import * as api from '@/lib/api';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+/**
+ * Sample initial problem for demo purposes as a fallback
+ */
+const sampleProblem = {
+  initial: "start = 1, end = 10\nfor i in range(start, end + 1):\n    if i % 2 == 0:\n        print(i)",
+  options: {
+    sortableId: 'sortable',
+    trashId: 'sortableTrash',
+    max_wrong_lines: 3,
+    can_indent: true,
+    grader: ParsonsGrader.LineBased,
+    exec_limit: 2500,
+    show_feedback: true
+  }
+};
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export default function Home() {
+const HomePage: NextPage = () => {
+  const [showDemo, setShowDemo] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [demoProblem, setDemoProblem] = useState<any>(null);
+  
+  // Get the resetContext function from context
+  const { setCurrentProblem, resetContext } = useParsonsContext();
+  
+  const handleTryDemo = async () => {
+    // Reset context before loading a new problem
+    resetContext();
+    
+    setIsLoading(true);
+    setShowDemo(true);
+    setShowCreate(false);
+    
+    try {
+      // Fetch the demo problem with a fixed ID
+      const demoProblemData = await api.fetchProblemById('demo-problem-1');
+      setDemoProblem(demoProblemData);
+      setCurrentProblem(demoProblemData.parsonsSettings);
+    } catch (error) {
+      console.error('Failed to load demo problem:', error);
+      // Fallback to the sample problem if the API call fails
+      setDemoProblem({
+        id: 'demo-problem-local',
+        title: 'Local Demo: Print Even Numbers in a Range',
+        description: 'Write code that prints all even numbers from a given start to end value using a for loop and conditional check.',
+        parsonsSettings: sampleProblem
+      });
+      setCurrentProblem(sampleProblem);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleCreateProblem = () => {
+    // Reset context before showing the create problem view
+    resetContext();
+    
+    setShowCreate(true);
+    setShowDemo(false);
+  };
+  
   return (
-    <div
-      className={`${geistSans.className} ${geistMono.className} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
-    >
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/pages/index.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="space-y-8">
+      {/* Hero section */}
+      <section className="text-center py-10">
+        <h1 className="text-4xl font-bold mb-4">Parsons Problem Tutor</h1>
+        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          Learn programming through code reordering challenges with AI-powered Socratic feedback
+        </p>
+        <div className="mt-8 flex justify-center space-x-4">
+          <button 
+            onClick={handleTryDemo}
+            disabled={isLoading}
+            className={`px-6 py-3 ${isLoading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-md font-medium`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            {isLoading ? 'Loading Demo...' : 'Try Demo'}
+          </button>
+          <button
+            onClick={handleCreateProblem}
+            className="px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium"
           >
-            Read our docs
-          </a>
+            Create Problem
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </section>
+
+      {/* Demo or Create section */}
+      {(showDemo || showCreate) && (
+        <section className="bg-white border rounded-lg shadow-sm p-6 max-w-5xl mx-auto">
+          {showDemo && demoProblem && (
+            <ParsonsProblemContainer
+              problemId={demoProblem.id}
+              title={demoProblem.title}
+              description={demoProblem.description}
+              initialProblem={demoProblem.parsonsSettings}
+            />
+          )}
+          
+          {showDemo && isLoading && (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          )}
+          
+          {showCreate && (
+            <ParsonsProblemContainer
+              title="Create Your Own Parsons Problem"
+              description="Upload or paste your Python code to generate a Parsons problem."
+              showUploader={true}
+            />
+          )}
+        </section>
+      )}
+
+      {/* Features section */}
+      {!showDemo && !showCreate && (
+        <>
+          <section className="grid md:grid-cols-3 gap-8 py-10">
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <h2 className="text-xl font-semibold mb-3">Interactive Learning</h2>
+              <p className="text-gray-600">
+                Solve programming challenges by rearranging jumbled code blocks into the correct order.
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <h2 className="text-xl font-semibold mb-3">AI-Powered Feedback</h2>
+              <p className="text-gray-600">
+                Receive Socratic feedback that guides you toward solutions without giving away answers.
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <h2 className="text-xl font-semibold mb-3">Create Your Own Problems</h2>
+              <p className="text-gray-600">
+                Upload Python code to automatically generate custom Parsons problems.
+              </p>
+            </div>
+          </section>
+
+          <section className="bg-blue-50 -mx-4 px-4 py-10">
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-2xl font-bold mb-6 text-center">How It Works</h2>
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mb-4">
+                    1
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">Select a Problem</h3>
+                  <p className="text-gray-600">Choose from our problem library or create your own from Python code.</p>
+                </div>
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mb-4">
+                    2
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">Arrange the Blocks</h3>
+                  <p className="text-gray-600">Drag and drop code blocks to create a working solution.</p>
+                </div>
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mb-4">
+                    3
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">Learn from Feedback</h3>
+                  <p className="text-gray-600">Get AI-powered hints that help you understand concepts deeply.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
-}
+};
+
+export default HomePage;

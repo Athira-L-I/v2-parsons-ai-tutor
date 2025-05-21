@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import SolutionChecker from './SolutionChecker';
 import FeedbackPanel from './FeedbackPanel';
 import { ParsonsSettings } from '@/@types/types';
+import ProblemUploader from './ProblemUploader';
 
 // Use dynamic import for the ParsonsWidget component since it relies on browser APIs
 const ParsonsWidgetComponent = dynamic(() => import('./ParsonsWidget'), { 
@@ -74,6 +75,11 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
         )}
       </div>
       
+      {/* Show uploader if requested and no problem is loaded */}
+      {showUploader && !currentProblem && (
+        <ProblemUploader />
+      )}
+
       {currentProblem && (
         <>
           <div className="mb-4">
