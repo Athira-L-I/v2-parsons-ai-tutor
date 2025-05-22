@@ -1,5 +1,7 @@
 import { createContext, useContext, ReactNode, useState, useCallback } from 'react';
 import { ParsonsSettings, ParsonsOptions } from '@/@types/types';
+import { AdaptiveState } from '@/lib/adaptiveFeatures';
+import { adaptiveController } from '@/lib/adaptiveController';
 
 interface ParsonsContextType {
   currentProblem: ParsonsSettings | null;
@@ -17,7 +19,14 @@ interface ParsonsContextType {
   attempts: number;
   incrementAttempts: () => void;
   handleFeedback: (feedback: any) => void;
-  resetContext: () => void; // Reset function
+  resetContext: () => void;
+  
+  // Adaptive features
+  adaptiveState: AdaptiveState;
+  setAdaptiveState: (state: AdaptiveState) => void;
+  triggerAdaptation: () => void;
+  adaptationMessage: string | null;
+  setAdaptationMessage: (message: string | null) => void;
 }
 
 const defaultContext: ParsonsContextType = {
@@ -36,7 +45,14 @@ const defaultContext: ParsonsContextType = {
   attempts: 0,
   incrementAttempts: () => {},
   handleFeedback: () => {},
-  resetContext: () => {}, // Reset function
+  resetContext: () => {},
+  
+  // Adaptive features
+  adaptiveState: adaptiveController.createInitialState(),
+  setAdaptiveState: () => {},
+  triggerAdaptation: () => {},
+  adaptationMessage: null,
+  setAdaptationMessage: () => {},
 };
 
 const ParsonsContext = createContext<ParsonsContextType>(defaultContext);
@@ -55,12 +71,45 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [attempts, setAttempts] = useState<number>(0);
+  const [adaptiveState, setAdaptiveState] = useState<AdaptiveState>(
+    adaptiveController.createInitialState()
+  );
+  const [adaptationMessage, setAdaptationMessage] = useState<string | null>(null);
 
   const incrementAttempts = useCallback(() => {
-    setAttempts(prev => prev + 1);
-  }, []);
+    setAttempts(prev => {
+      const newAttempts = prev + 1;
+      
+      // Update adaptive state after attempt
+      const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
+        adaptiveState,
+        isCorrect === true
+      );
+      setAdaptiveState(newAdaptiveState);
+      
+      return newAttempts;
+    });
+  }, [adaptiveState, isCorrect]);
 
-  // Reset function to clear all state values
+  const triggerAdaptation = useCallback(() => {
+    if (!currentProblem) return;
+    
+    const shouldAdapt = adaptiveController.shouldTriggerAdaptation(adaptiveState);
+    
+    if (shouldAdapt) {
+      const result = adaptiveController.applyAdaptiveFeatures(adaptiveState, currentProblem);
+      
+      if (result.success) {
+        setCurrentProblem(result.newSettings);
+        setAdaptiveState(result.newState);
+        setAdaptationMessage(result.message);
+        
+        // Clear the message after 5 seconds
+        setTimeout(() => setAdaptationMessage(null), 5000);
+      }
+    }
+  }, [currentProblem, adaptiveState]);
+
   const resetContext = useCallback(() => {
     setCurrentProblem(null);
     setUserSolution([]);
@@ -69,6 +118,8 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     setIsCorrect(null);
     setIsLoading(false);
     setAttempts(0);
+    setAdaptiveState(adaptiveController.createInitialState());
+    setAdaptationMessage(null);
   }, []);
 
   const handleFeedback = (feedback: any) => {
@@ -107,6 +158,13 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
         incrementAttempts,
         handleFeedback,
         resetContext,
+        
+        // Adaptive features
+        adaptiveState,
+        setAdaptiveState,
+        triggerAdaptation,
+        adaptationMessage,
+        setAdaptationMessage,
       }}
     >
       {children}
