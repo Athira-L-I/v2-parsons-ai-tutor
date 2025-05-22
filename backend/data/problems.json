@@ -1,0 +1,107 @@
+[
+  {
+    "id": "40d3b7d0-e879-49f9-b527-408f5589ebf8",
+    "title": "Find Maximum in List",
+    "description": "This problem asks the user to implement a function to find the maximum value in a list using a for loop.",
+    "difficulty": "easy",
+    "tags": [
+      "python",
+      "list",
+      "loop"
+    ],
+    "parsonsSettings": {
+      "initial": "def find_max(numbers):\n    if not numbers:\n        return None\n    max_value = numbers[0]\n    for num in numbers:\n        if num > max_value:\n            max_value = num\n    return max_value\n# This is a dummy calculation ",
+      "options": {
+        "sortableId": "sortable",
+        "trashId": "sortableTrash",
+        "max_wrong_lines": 3,
+        "grader": "ParsonsWidget._graders.LineBasedGrader",
+        "can_indent": true,
+        "x_indent": 50,
+        "exec_limit": 2500,
+        "feedback_cb": true,
+        "show_feedback": true
+      }
+    },
+    "createdAt": "2025-04-24T14:00:00.000000",
+    "updatedAt": "2025-04-24T14:00:00.000000"
+  },
+  {
+    "id": "demo-problem-1",
+    "title": "Print Even Numbers in a Range",
+    "description": "Write code that prints all even numbers from a given start to end value using a for loop and conditional check.",
+    "difficulty": "medium",
+    "tags": [
+      "python",
+      "generated"
+    ],
+    "parsonsSettings": {
+      "initial": "start = 1, end = 10\nfor i in range(start, end + 1):\n    if i % 2 == 0:\n        print(i)",
+      "options": {
+        "sortableId": "sortable",
+        "trashId": "sortableTrash",
+        "max_wrong_lines": 3,
+        "grader": "ParsonsWidget._graders.LineBasedGrader",
+        "can_indent": true,
+        "x_indent": 50,
+        "exec_limit": 2500,
+        "feedback_cb": true,
+        "show_feedback": true
+      }
+    },
+    "createdAt": "2025-04-23T14:45:17.677088",
+    "updatedAt": "2025-04-23T14:45:17.677088"
+  },
+  {
+    "id": "4a8b4854-44a9-4217-8f40-9bccdab3e4f1",
+    "title": "Print Positive Elements from a List",
+    "description": "Write code to iterate through a list and print only the positive numbers.",
+    "difficulty": "medium",
+    "tags": [
+      "python",
+      "generated"
+    ],
+    "parsonsSettings": {
+      "initial": "a = [-10, 15, 0, 20, -5, 30, -2]\nfor val in a:\n    if val > 0:\n        print(val)\nif val < 0: ",
+      "options": {
+        "sortableId": "sortable",
+        "trashId": "sortableTrash",
+        "max_wrong_lines": 3,
+        "grader": "ParsonsWidget._graders.LineBasedGrader",
+        "can_indent": true,
+        "x_indent": 50,
+        "exec_limit": 2500,
+        "feedback_cb": true,
+        "show_feedback": true
+      }
+    },
+    "createdAt": "2025-04-24T16:36:06.257969",
+    "updatedAt": "2025-04-24T16:36:06.257969"
+  },
+  {
+    "id": "10c1ff42-559a-48aa-9892-be39b4d35ae7",
+    "title": "Generated Problem",
+    "description": "This problem was automatically generated from provided source code.",
+    "difficulty": "medium",
+    "tags": [
+      "python",
+      "generated"
+    ],
+    "parsonsSettings": {
+      "initial": "def Fibonacci(n):\n    if n < 0:\n        print(\"Incorrect input\")\n    elif n == 0:\n        return 0\n    elif n == 1 or n == 2:\n        return 1\n    else:\n        return Fibonacci(n-1) + Fibonacci(n-2)\nprint(Fibonacci(9))\n",
+      "options": {
+        "sortableId": "sortable",
+        "trashId": "sortableTrash",
+        "max_wrong_lines": 0,
+        "grader": "ParsonsWidget._graders.LineBasedGrader",
+        "can_indent": true,
+        "x_indent": 50,
+        "exec_limit": 2500,
+        "feedback_cb": true,
+        "show_feedback": true
+      }
+    },
+    "createdAt": "2025-04-26T15:51:58.287612",
+    "updatedAt": "2025-04-26T15:51:58.287612"
+  }
+]

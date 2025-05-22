@@ -30,9 +30,11 @@ def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]
     # Extract the correct solution and user solution
     initial_code = problem_settings["initial"]
     correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
-    
+    correct_lines_str = "\n".join(correct_lines)
+
     # Clean user solution lines
     cleaned_user_solution = [line.strip() for line in user_solution if line.strip()]
+    cleaned_user_solution_str = "\n".join(cleaned_user_solution)
     
     # If no OpenAI API key is available, use a fallback method
     if not openai.api_key:
@@ -45,12 +47,12 @@ def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]
         
         The correct solution is:
         ```python
-        {"\n".join(correct_lines)}
+        {correct_lines_str}
         ```
         
         The student's current attempt is:
         ```python
-        {"\n".join(cleaned_user_solution)}
+        {cleaned_user_solution_str}
         ```
         
         Please provide Socratic-style feedback - guide the student with questions rather than giving away the answer.
