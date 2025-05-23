@@ -6,7 +6,7 @@ export interface AdaptiveState {
   incorrectAttempts: number;
   combinedBlocks: number;
   removedDistractors: number;
-  indentationProvided: boolean;
+  // indentationProvided: boolean;
 }
 
 export interface BlockCombineResult {
@@ -26,7 +26,7 @@ export interface PairedDistractorResult {
 export interface IndentationResult {
   success: boolean;
   newSettings: ParsonsSettings;
-  indentationProvided: boolean;
+  // : boolean;
   message: string;
 }
 
@@ -449,16 +449,15 @@ function calculateEditDistance(str1: string, str2: string): number {
 /**
  * Provides indentation for a Parsons problem to make it easier
  */
+// Find this function (around line 250-270) and replace it:
 export function provideIndentation(
   settings: ParsonsSettings
 ): IndentationResult {
-  // The settings.initial already contains the correct solution with proper indentation
-  // We just need to disable the indentation controls since it's provided
   const newSettings: ParsonsSettings = {
     ...settings,
     options: {
       ...settings.options,
-      can_indent: false, // Disable indentation since it's provided
+      can_indent: false, // Disable indentation controls - this IS the "provided" state
       x_indent: 0, // No indentation control needed
     },
   };
@@ -466,8 +465,9 @@ export function provideIndentation(
   return {
     success: true,
     newSettings,
-    indentationProvided: true,
-    message: 'Indentation has been provided to simplify the problem',
+    // : true,
+    message:
+      'Indentation controls have been disabled - correct indentation is provided',
   };
 }
 
@@ -727,4 +727,11 @@ function shuffleArray<T>(array: T[]): T[] {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
+}
+
+/**
+ * Checks if indentation has been provided (controls disabled)
+ */
+export function isIndentationProvided(settings: ParsonsSettings): boolean {
+  return settings.options.can_indent === false;
 }

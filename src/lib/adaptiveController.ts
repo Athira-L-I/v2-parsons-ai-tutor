@@ -53,7 +53,7 @@ export class AdaptiveController {
       priority: 3,
       description: 'Provide correct indentation',
       condition: (state, settings) =>
-        state.incorrectAttempts >= 4 && settings.options.can_indent === true,
+        state.incorrectAttempts >= 4 && settings.options.can_indent === true, // Changed this line
     },
     {
       type: 'combine',
@@ -97,7 +97,7 @@ export class AdaptiveController {
                 (result as any).combinedBlocks || 1;
               break;
             case 'provide_indentation':
-              newState.indentationProvided = true;
+              // REMOVE this case entirely - we now check settings.options.can_indent instead
               break;
           }
         }
@@ -190,7 +190,6 @@ export class AdaptiveController {
       incorrectAttempts: 0,
       combinedBlocks: 0,
       removedDistractors: 0,
-      indentationProvided: false,
     };
   }
 
