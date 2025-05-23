@@ -4,6 +4,7 @@ import {
   AdaptiveState,
   isIndentationProvided,
   identifyPairedDistractors,
+  combineBlocks,
 } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
@@ -16,6 +17,8 @@ export interface BlockItem {
   groupId?: number;
   groupColor?: string;
   isPairedDistractor?: boolean;
+  isCombined?: boolean;
+  subLines?: string[];
 }
 
 export interface UseParsonsWidgetState {
@@ -45,6 +48,12 @@ export interface UseParsonsWidgetActions {
   ) => void;
   incrementAttempts: (isCorrect: boolean) => void;
   triggerAdaptation: () => void;
+  createCombinedBlock: (
+    blockIds: string[],
+    targetArea?: 'blocks' | 'solution' | 'trash'
+  ) => void;
+  splitCombinedBlock: (combinedBlockId: string) => void;
+  applyCombineBlocksAdaptation: () => void;
 }
 
 export interface UseParsonsWidgetReturn
@@ -116,7 +125,7 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       setSettings(newSettings);
       setError(null);
 
-      // Process blocks and assign group information using adaptiveFeatures logic
+      // Process blocks and assign group information
       const lines = newSettings.initial
         .split('\n')
         .filter((line) => line.trim());
@@ -143,12 +152,22 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
             ? line.replace(/#(distractor|paired)\s*$/, '')
             : line;
 
+        // Check if this line contains combined blocks (\\n separator)
+        const isCombined = cleanLine.includes('\\n');
+        let subLines: string[] | undefined;
+        let displayText = cleanLine.trimStart();
+
+        if (isCombined) {
+          subLines = cleanLine.split('\\n').map((subLine) => subLine.trim());
+          displayText = `${subLines.length} combined lines`;
+        }
+
         let assignedGroupId: number | undefined;
         let assignedGroupColor: string | undefined;
         let isPairedDistractor = false;
 
         // Find which group this line belongs to
-        const cleanText = cleanLine.trim();
+        const cleanText = isCombined ? subLines![0] : cleanLine.trim();
 
         pairedGroups.forEach((group, groupIndex) => {
           group.forEach((item) => {
@@ -157,20 +176,22 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
             if (itemText === cleanText) {
               assignedGroupId = groupIndex;
               assignedGroupColor = groupColors[groupIndex % groupColors.length];
-              isPairedDistractor = item.distractor !== ''; // It's a distractor if distractor field is not empty
+              isPairedDistractor = item.distractor !== '';
             }
           });
         });
 
         return {
           id: `block-${index}`,
-          text: cleanLine.trimStart(),
+          text: displayText,
           indentation: 0,
           isDistractor: isDistractor || isPaired,
           originalIndex: index,
           groupId: assignedGroupId,
           groupColor: assignedGroupColor,
           isPairedDistractor,
+          isCombined,
+          subLines,
         };
       });
 
@@ -379,6 +400,199 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
     }
   }, [settings, adaptiveFeaturesEnabled, adaptiveState, instanceId]);
 
+  const createCombinedBlock = useCallback(
+    (
+      blockIds: string[],
+      targetArea: 'blocks' | 'solution' | 'trash' = 'solution'
+    ) => {
+      console.log(
+        `Instance ${instanceId}: createCombinedBlock() called with:`,
+        blockIds
+      );
+
+      if (blockIds.length < 2) {
+        console.warn('Need at least 2 blocks to combine');
+        return;
+      }
+
+      // Get all blocks from all areas
+      const allBlocks = [...blocks, ...solution, ...trash];
+      const blocksToMove: BlockItem[] = [];
+
+      // Find blocks to combine
+      blockIds.forEach((id) => {
+        const block = allBlocks.find((b) => b.id === id);
+        if (block) {
+          blocksToMove.push(block);
+        }
+      });
+
+      if (blocksToMove.length !== blockIds.length) {
+        console.error('Could not find all blocks to combine');
+        return;
+      }
+
+      // Sort blocks by their original index to maintain order
+      blocksToMove.sort((a, b) => a.originalIndex - b.originalIndex);
+
+      // Create combined block with proper indentation preserved
+      const combinedBlock: BlockItem = {
+        id: `combined-${Date.now()}`,
+        text: `${blocksToMove.length} combined lines`,
+        indentation: Math.min(...blocksToMove.map((b) => b.indentation)),
+        isDistractor: blocksToMove.some((b) => b.isDistractor),
+        originalIndex: Math.min(...blocksToMove.map((b) => b.originalIndex)),
+        groupId: blocksToMove[0].groupId,
+        groupColor: blocksToMove[0].groupColor,
+        isPairedDistractor: blocksToMove.some((b) => b.isPairedDistractor),
+        isCombined: true,
+        subLines: blocksToMove.map((b) => {
+          // Preserve original indentation for each line
+          const indentSpaces = '    '.repeat(b.indentation);
+          return b.isCombined && b.subLines
+            ? b.subLines
+                .map((subLine) => indentSpaces + subLine.trim())
+                .join('\n')
+            : indentSpaces + b.text.trim();
+        }),
+      };
+
+      // Remove the combined blocks from all areas and add the new combined block
+      const blocksToRemove = new Set(blockIds);
+
+      const newBlocks = blocks.filter((b) => !blocksToRemove.has(b.id));
+      const newSolution = solution.filter((b) => !blocksToRemove.has(b.id));
+      const newTrash = trash.filter((b) => !blocksToRemove.has(b.id));
+
+      // Add combined block to target area
+      if (targetArea === 'blocks') {
+        newBlocks.push(combinedBlock);
+      } else if (targetArea === 'solution') {
+        newSolution.push(combinedBlock);
+      } else {
+        newTrash.push(combinedBlock);
+      }
+
+      // Force state update to trigger statistics recalculation
+      setBlocks([...newBlocks]);
+      setSolution([...newSolution]);
+      setTrash([...newTrash]);
+
+      console.log(
+        `Instance ${instanceId}: Combined ${blockIds.length} blocks into:`,
+        combinedBlock.id
+      );
+    },
+    [blocks, solution, trash, instanceId]
+  );
+
+  const splitCombinedBlock = useCallback(
+    (combinedBlockId: string) => {
+      console.log(
+        `Instance ${instanceId}: splitCombinedBlock() called with:`,
+        combinedBlockId
+      );
+
+      // Find the combined block
+      const allBlocks = [...blocks, ...solution, ...trash];
+      const combinedBlock = allBlocks.find(
+        (block) => block.id === combinedBlockId && block.isCombined
+      );
+
+      if (!combinedBlock || !combinedBlock.subLines) {
+        console.error('Could not find combined block or block is not combined');
+        return;
+      }
+
+      // Create individual blocks from subLines, preserving indentation
+      const individualBlocks: BlockItem[] = combinedBlock.subLines.map(
+        (line, index) => {
+          // Extract indentation from the line
+          const indentMatch = line.match(/^(\s*)/);
+          const indentLevel = indentMatch
+            ? Math.floor(indentMatch[1].length / 4)
+            : 0;
+          const cleanText = line.trim();
+
+          return {
+            id: `split-${combinedBlockId}-${index}-${Date.now()}`,
+            text: cleanText,
+            indentation: indentLevel,
+            isDistractor: combinedBlock.isDistractor,
+            originalIndex: combinedBlock.originalIndex + index,
+            groupId: combinedBlock.groupId,
+            groupColor: combinedBlock.groupColor,
+            isPairedDistractor: combinedBlock.isPairedDistractor,
+            isCombined: false,
+          };
+        }
+      );
+
+      // Determine which area the combined block was in
+      let targetArea: 'blocks' | 'solution' | 'trash';
+      if (blocks.some((b) => b.id === combinedBlockId)) {
+        targetArea = 'blocks';
+      } else if (solution.some((b) => b.id === combinedBlockId)) {
+        targetArea = 'solution';
+      } else {
+        targetArea = 'trash';
+      }
+
+      // Remove combined block and add individual blocks
+      const newBlocks = blocks.filter((b) => b.id !== combinedBlockId);
+      const newSolution = solution.filter((b) => b.id !== combinedBlockId);
+      const newTrash = trash.filter((b) => b.id !== combinedBlockId);
+
+      // Add individual blocks to the same area where combined block was
+      if (targetArea === 'blocks') {
+        newBlocks.push(...individualBlocks);
+      } else if (targetArea === 'solution') {
+        newSolution.push(...individualBlocks);
+      } else {
+        newTrash.push(...individualBlocks);
+      }
+
+      // Force state update to trigger statistics recalculation
+      setBlocks([...newBlocks]);
+      setSolution([...newSolution]);
+      setTrash([...newTrash]);
+
+      console.log(
+        `Instance ${instanceId}: Split combined block into ${individualBlocks.length} individual blocks`
+      );
+    },
+    [blocks, solution, trash, instanceId]
+  );
+
+  const applyCombineBlocksAdaptation = useCallback(() => {
+    console.log(
+      `Instance ${instanceId}: applyCombineBlocksAdaptation() called`
+    );
+
+    if (!settings) {
+      console.warn('No settings available for combining blocks');
+      return;
+    }
+
+    try {
+      // Use the combineBlocks function from adaptiveFeatures
+      const result = combineBlocks(settings, 1);
+
+      if (result.success) {
+        // Update settings with combined blocks
+        updateSettings(result.newSettings);
+        console.log('Applied combine blocks adaptation:', result.message);
+      } else {
+        console.log(
+          'Could not apply combine blocks adaptation:',
+          result.message
+        );
+      }
+    } catch (error) {
+      console.error('Error applying combine blocks adaptation:', error);
+    }
+  }, [settings, updateSettings, instanceId]);
+
   return {
     isInitialized,
     isLoading,
@@ -398,5 +612,8 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
     moveBlock,
     incrementAttempts,
     triggerAdaptation,
+    createCombinedBlock,
+    splitCombinedBlock,
+    applyCombineBlocksAdaptation,
   };
 };
