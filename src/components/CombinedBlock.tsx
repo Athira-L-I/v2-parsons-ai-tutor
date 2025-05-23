@@ -28,13 +28,13 @@ interface DragItem {
 }
 
 const ItemTypes = {
-  CODE_BLOCK: 'codeBlock',
+  CODE_BLOCK: 'CODE_BLOCK',
 };
 
 const CombinedBlock: React.FC<CombinedBlockProps> = ({
   id,
   index,
-  lines,
+  lines = [], // <-- Default to empty array
   indentation,
   area,
   moveBlock,
@@ -62,7 +62,7 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
   });
 
   const [{ isOver, canDrop }, drop] = useDrop({
-    accept: ItemTypes.CODE_BLOCK,
+    accept: [ItemTypes.CODE_BLOCK, ItemTypes.CODE_BLOCK],
     hover: (item: DragItem, monitor) => {
       if (!ref.current) return;
 
@@ -159,7 +159,7 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
             </div>
           )}
           <span className="text-xs text-gray-500 font-medium">
-            Combined Block ({lines.length} lines)
+            Combined Block ({lines?.length ?? 0} lines)
           </span>
         </div>
 
@@ -172,7 +172,7 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
 
       {/* Code lines with visual separators */}
       <div className="space-y-1">
-        {lines.map((line, lineIndex) => (
+        {(lines || []).map((line, lineIndex) => (
           <div key={lineIndex}>
             <pre className="font-mono text-sm text-gray-800 leading-tight">
               {line}

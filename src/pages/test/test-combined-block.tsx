@@ -10,9 +10,8 @@ const EmptyDropTarget: React.FC<{
   onDrop: (item: any) => void;
 }> = ({ area, onDrop }) => {
   const [, drop] = useDrop({
-    accept: 'COMBINED_BLOCK',
+    accept: 'codeBlock',
     drop: (item: any) => {
-      // You may want to pass correct indices/areas here
       onDrop(item);
     },
   });
@@ -20,12 +19,9 @@ const EmptyDropTarget: React.FC<{
   return (
     <div
       ref={drop}
-      className="h-24 flex items-center justify-center text-gray-500 border-2 border-dashed border-gray-300 rounded bg-gray-50"
-      style={{ minHeight: '64px' }}
+      className="p-4 text-gray-500 border border-dashed rounded h-16 flex items-center justify-center"
     >
-      {area === 'sortable'
-        ? 'Drop combined blocks here'
-        : 'No blocks in trash (drop here)'}
+      Drop blocks here
     </div>
   );
 };
