@@ -1,6 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ParsonsSettings } from '@/@types/types';
-import { AdaptiveState, isIndentationProvided } from '@/lib/adaptiveFeatures';
+import {
+  AdaptiveState,
+  isIndentationProvided,
+  identifyPairedDistractors,
+} from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
 export interface BlockItem {
@@ -9,6 +13,9 @@ export interface BlockItem {
   indentation: number;
   isDistractor?: boolean;
   originalIndex: number;
+  groupId?: number;
+  groupColor?: string;
+  isPairedDistractor?: boolean;
 }
 
 export interface UseParsonsWidgetState {
@@ -108,6 +115,78 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       );
       setSettings(newSettings);
       setError(null);
+
+      // Process blocks and assign group information using adaptiveFeatures logic
+      const lines = newSettings.initial
+        .split('\n')
+        .filter((line) => line.trim());
+
+      // Group colors for paired distractors
+      const groupColors = [
+        'border-purple-200 bg-purple-50',
+        'border-indigo-200 bg-indigo-50',
+        'border-pink-200 bg-pink-50',
+        'border-teal-200 bg-teal-50',
+        'border-amber-200 bg-amber-50',
+      ];
+
+      // Use the existing function to identify paired groups
+      const pairedResult = identifyPairedDistractors(newSettings);
+      const pairedGroups = pairedResult.pairedGroups;
+
+      // Process each line and assign group information
+      const processedBlocks: BlockItem[] = lines.map((line, index) => {
+        const isDistractor = line.includes('#distractor');
+        const isPaired = line.includes('#paired');
+        const cleanLine =
+          isDistractor || isPaired
+            ? line.replace(/#(distractor|paired)\s*$/, '')
+            : line;
+
+        let assignedGroupId: number | undefined;
+        let assignedGroupColor: string | undefined;
+        let isPairedDistractor = false;
+
+        // Find which group this line belongs to
+        const cleanText = cleanLine.trim();
+
+        pairedGroups.forEach((group, groupIndex) => {
+          group.forEach((item) => {
+            const itemText =
+              item.distractor === '' ? item.correct : item.distractor;
+            if (itemText === cleanText) {
+              assignedGroupId = groupIndex;
+              assignedGroupColor = groupColors[groupIndex % groupColors.length];
+              isPairedDistractor = item.distractor !== ''; // It's a distractor if distractor field is not empty
+            }
+          });
+        });
+
+        return {
+          id: `block-${index}`,
+          text: cleanLine.trimStart(),
+          indentation: 0,
+          isDistractor: isDistractor || isPaired,
+          originalIndex: index,
+          groupId: assignedGroupId,
+          groupColor: assignedGroupColor,
+          isPairedDistractor,
+        };
+      });
+
+      // Shuffle blocks and set initial state
+      const shuffledBlocks = [...processedBlocks].sort(
+        () => Math.random() - 0.5
+      );
+
+      if (newSettings.options.trashId) {
+        setSolution([]);
+        setTrash(shuffledBlocks);
+      } else {
+        setSolution(shuffledBlocks);
+        setTrash([]);
+      }
+      setBlocks([]);
     },
     [instanceId]
   );
