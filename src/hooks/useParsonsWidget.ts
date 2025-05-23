@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ParsonsSettings } from '@/@types/types';
 import { AdaptiveState, isIndentationProvided } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
@@ -44,7 +44,17 @@ export interface UseParsonsWidgetReturn
   extends UseParsonsWidgetState,
     UseParsonsWidgetActions {}
 
+// Add a global debug counter to track hook instances
+let hookInstanceCounter = 0;
+
 export const useParsonsWidget = (): UseParsonsWidgetReturn => {
+  // Add instance tracking
+  const [instanceId] = useState(() => {
+    hookInstanceCounter++;
+    console.log(`useParsonsWidget instance ${hookInstanceCounter} created`);
+    return hookInstanceCounter;
+  });
+
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,35 +71,62 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
     null
   );
 
+  // Debug effect to track settings changes
+  useEffect(() => {
+    console.log(`Instance ${instanceId}: settings changed to:`, settings);
+  }, [settings, instanceId]);
+
+  // Debug effect to track adaptive features changes
+  useEffect(() => {
+    console.log(
+      `Instance ${instanceId}: adaptiveFeaturesEnabled changed to:`,
+      adaptiveFeaturesEnabled
+    );
+  }, [adaptiveFeaturesEnabled, instanceId]);
+
   const initialize = useCallback(() => {
-    // Empty for now - will be implemented later
-    console.log('useParsonsWidget: initialize() called');
-  }, []);
+    console.log(`Instance ${instanceId}: initialize() called`);
+  }, [instanceId]);
 
   const cleanup = useCallback(() => {
-    console.log('useParsonsWidget: cleanup() called');
+    console.log(`Instance ${instanceId}: cleanup() called`);
     setBlocks([]);
     setSolution([]);
     setTrash([]);
     setAdaptiveState(adaptiveController.createInitialState());
     setAdaptationMessage(null);
-  }, []);
+    setSettings(null);
+    setAdaptiveFeaturesEnabled(false);
+    setError(null);
+  }, [instanceId]);
 
-  const updateSettings = useCallback((newSettings: ParsonsSettings) => {
-    setSettings(newSettings);
-    console.log('useParsonsWidget: updateSettings() called with:', newSettings);
-  }, []);
+  const updateSettings = useCallback(
+    (newSettings: ParsonsSettings) => {
+      console.log(
+        `Instance ${instanceId}: updateSettings() called with:`,
+        newSettings
+      );
+      setSettings(newSettings);
+      setError(null);
+    },
+    [instanceId]
+  );
 
   const toggleAdaptiveFeatures = useCallback(() => {
+    console.log(`Instance ${instanceId}: toggleAdaptiveFeatures() called`);
+    console.log(
+      `Instance ${instanceId}: Current settings before toggle:`,
+      settings
+    );
+
     setAdaptiveFeaturesEnabled((prev) => {
       const newValue = !prev;
       console.log(
-        'useParsonsWidget: toggleAdaptiveFeatures() called, new value:',
-        newValue
+        `Instance ${instanceId}: toggleAdaptiveFeatures() changing from ${prev} to ${newValue}`
       );
       return newValue;
     });
-  }, []);
+  }, [settings, instanceId]);
 
   const moveBlock = useCallback(
     (
@@ -98,7 +135,7 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       toArea: 'blocks' | 'solution' | 'trash',
       newIndex?: number
     ) => {
-      console.log('useParsonsWidget: moveBlock() called', {
+      console.log(`Instance ${instanceId}: moveBlock() called`, {
         blockId,
         fromArea,
         toArea,
@@ -176,14 +213,18 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
           break;
       }
     },
-    [blocks, solution, trash]
+    [blocks, solution, trash, instanceId]
   );
 
   const incrementAttempts = useCallback(
     (isCorrect: boolean) => {
       console.log(
-        'useParsonsWidget: incrementAttempts() called with isCorrect:',
+        `Instance ${instanceId}: incrementAttempts() called with isCorrect:`,
         isCorrect
+      );
+      console.log(
+        `Instance ${instanceId}: Current settings when incrementing:`,
+        settings
       );
 
       const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
@@ -199,15 +240,19 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       ) {
         console.log('Adaptation is now available - user can manually trigger');
         setAdaptationMessage(
-          'Adaptive help is now available! Click "Trigger Adaptation" when you\'re ready.'
+          'Adaptive help is now available! Click "Apply Adaptive Help" when you\'re ready.'
         );
       }
     },
-    [adaptiveState, adaptiveFeaturesEnabled]
+    [adaptiveState, adaptiveFeaturesEnabled, settings, instanceId]
   );
 
   const triggerAdaptation = useCallback(() => {
-    console.log('useParsonsWidget: triggerAdaptation() called');
+    console.log(`Instance ${instanceId}: triggerAdaptation() called`);
+    console.log(
+      `Instance ${instanceId}: Current settings when triggering:`,
+      settings
+    );
 
     if (!settings) {
       console.warn('Cannot trigger adaptation: no settings available');
@@ -253,7 +298,7 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       console.error('Error during adaptation:', err);
       setError(errorMessage);
     }
-  }, [settings, adaptiveFeaturesEnabled, adaptiveState]);
+  }, [settings, adaptiveFeaturesEnabled, adaptiveState, instanceId]);
 
   return {
     isInitialized,
