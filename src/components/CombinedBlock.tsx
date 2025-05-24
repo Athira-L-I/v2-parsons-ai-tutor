@@ -1,5 +1,4 @@
 import React, { useRef } from 'react';
-import { useDrag, useDrop } from 'react-dnd';
 
 interface CombinedBlockProps {
   id: string;
@@ -18,23 +17,20 @@ interface CombinedBlockProps {
   indentSize?: number;
   groupColor?: string;
   groupId?: number;
+  // Add these props to match ParsonsBoard's expectations
+  onDragStart?: (
+    e: React.DragEvent,
+    area: 'sortable' | 'trash',
+    block: any,
+    index: number
+  ) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }
-
-interface DragItem {
-  id: string;
-  index: number;
-  area: 'sortable' | 'trash';
-  type: string;
-}
-
-const ItemTypes = {
-  CODE_BLOCK: 'CODE_BLOCK',
-};
 
 const CombinedBlock: React.FC<CombinedBlockProps> = ({
   id,
   index,
-  lines = [], // <-- Default to empty array
+  lines = [],
   indentation,
   area,
   moveBlock,
@@ -43,57 +39,10 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
   indentSize = 50,
   groupColor,
   groupId,
+  onDragStart,
+  onDragEnd,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
-
-  const [{ isDragging }, drag] = useDrag({
-    type: ItemTypes.CODE_BLOCK,
-    item: () => {
-      return { id, index, area, type: ItemTypes.CODE_BLOCK };
-    },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-    end: (item, monitor) => {
-      if (!monitor.didDrop()) {
-        return;
-      }
-    },
-  });
-
-  const [{ isOver, canDrop }, drop] = useDrop({
-    accept: [ItemTypes.CODE_BLOCK, ItemTypes.CODE_BLOCK],
-    hover: (item: DragItem, monitor) => {
-      if (!ref.current) return;
-
-      const dragIndex = item.index;
-      const hoverIndex = index;
-      const dragArea = item.area;
-      const hoverArea = area;
-
-      if (dragIndex === hoverIndex && dragArea === hoverArea) return;
-
-      const hoverBoundingRect = ref.current.getBoundingClientRect();
-      const hoverMiddleY =
-        (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
-      const clientOffset = monitor.getClientOffset();
-      const hoverClientY = clientOffset
-        ? clientOffset.y - hoverBoundingRect.top
-        : 0;
-
-      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) return;
-      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) return;
-
-      moveBlock(dragIndex, hoverIndex, dragArea, hoverArea);
-
-      item.index = hoverIndex;
-      item.area = hoverArea;
-    },
-    collect: (monitor) => ({
-      isOver: monitor.isOver(),
-      canDrop: monitor.canDrop(),
-    }),
-  });
 
   const handleIndentDecrease = () => {
     if (indentation > 0) {
@@ -105,32 +54,68 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
     changeIndentation(index, indentation + 1);
   };
 
-  const opacity = isDragging ? 0.4 : 1;
-  const calculatedIndent = indentation * (indentSize / 16);
-
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.setData(
-      'application/json',
-      JSON.stringify({ id, index, area })
-    );
-    e.dataTransfer.effectAllowed = 'move';
+  // Create a block object that matches what ParsonsBoard expects
+  const blockData = {
+    id,
+    text: `${lines.length} combined lines`,
+    indentation,
+    isDistractor: false,
+    groupId,
+    groupColor,
+    isCombined: true,
+    subLines: lines,
   };
 
-  drag(drop(ref));
+  // Handle native drag start - this makes it compatible with ParsonsBoard
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    console.log('CombinedBlock drag start:', id);
+
+    // Set the drag data in the format ParsonsBoard expects
+    e.dataTransfer.setData(
+      'text/plain',
+      JSON.stringify({
+        area,
+        block: blockData,
+        index,
+      })
+    );
+
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.classList.add('opacity-50');
+
+    // Call the parent's drag start handler if provided
+    if (onDragStart) {
+      onDragStart(e, area, blockData, index);
+    }
+  };
+
+  // Handle native drag end
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    console.log('CombinedBlock drag end:', id);
+    e.currentTarget.classList.remove('opacity-50');
+
+    if (onDragEnd) {
+      onDragEnd(e);
+    }
+  };
+
+  // Handle drag over for drop zones
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
 
   return (
     <div
       ref={ref}
       draggable
       onDragStart={handleDragStart}
-      className={`flex flex-col p-2 bg-white rounded shadow cursor-move border-2 ${
-        isOver && canDrop
-          ? 'border-blue-500'
-          : groupColor
-          ? groupColor
-          : 'border-gray-200'
-      }`}
-      style={{ opacity, paddingLeft: `${calculatedIndent + 8}px` }}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      className={`flex flex-col p-2 bg-white rounded shadow cursor-move border-2 transition-all duration-200 ${
+        groupColor ? groupColor : 'border-gray-200'
+      } hover:shadow-md`}
+      style={{ paddingLeft: `${(indentation * indentSize) / 16 + 8}px` }}
     >
       {/* Header with controls and group indicator */}
       <div className="flex items-center justify-between mb-2">
@@ -141,9 +126,9 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
                 type="button"
                 onClick={handleIndentDecrease}
                 disabled={indentation === 0}
-                className={`px-2 py-0.5 text-xs rounded ${
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${
                   indentation === 0
-                    ? 'bg-gray-200 text-gray-500'
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     : 'bg-gray-300 hover:bg-gray-400'
                 }`}
               >
@@ -152,33 +137,33 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
               <button
                 type="button"
                 onClick={handleIndentIncrease}
-                className="px-2 py-0.5 text-xs bg-gray-300 hover:bg-gray-400 rounded"
+                className="px-2 py-0.5 text-xs bg-gray-300 hover:bg-gray-400 rounded transition-colors"
               >
                 →
               </button>
             </div>
           )}
           <span className="text-xs text-gray-500 font-medium">
-            Combined Block ({lines?.length ?? 0} lines)
+            📦 Combined Block ({lines?.length ?? 0} lines)
           </span>
         </div>
 
         {groupId !== undefined && (
-          <span className="text-xs px-2 py-1 bg-white rounded border">
+          <span className="text-xs px-2 py-1 bg-white rounded border border-gray-300">
             Group {groupId + 1}
           </span>
         )}
       </div>
 
       {/* Code lines with visual separators */}
-      <div className="space-y-1">
+      <div className="space-y-1 bg-gray-50 p-2 rounded">
         {(lines || []).map((line, lineIndex) => (
           <div key={lineIndex}>
-            <pre className="font-mono text-sm text-gray-800 leading-tight">
+            <pre className="font-mono text-sm text-gray-800 leading-tight whitespace-pre-wrap">
               {line}
             </pre>
             {lineIndex < lines.length - 1 && (
-              <div className="border-b border-gray-200 my-1"></div>
+              <div className="border-b border-gray-300 my-1 opacity-50"></div>
             )}
           </div>
         ))}
@@ -186,8 +171,10 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
 
       {/* Footer indicator */}
       <div className="mt-2 pt-1 border-t border-gray-200">
-        <div className="text-xs text-gray-400 text-center">
-          ⋮ Combined Block ⋮
+        <div className="text-xs text-gray-400 text-center flex items-center justify-center space-x-1">
+          <span>⋮</span>
+          <span className="font-medium">Combined Block</span>
+          <span>⋮</span>
         </div>
       </div>
     </div>

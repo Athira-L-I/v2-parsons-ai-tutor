@@ -95,13 +95,15 @@ const ParsonsBoard: React.FC = () => {
     setUserSolution(solution);
   };
 
-  // Handle drag start
+  // Handle drag start - unified for both regular and combined blocks
   const handleDragStart = (
     e: React.DragEvent,
     area: 'sortable' | 'trash',
     block: BlockItem,
     index: number
   ) => {
+    console.log('Drag start:', block.id, 'from', area);
+
     e.dataTransfer.setData(
       'text/plain',
       JSON.stringify({
@@ -112,13 +114,22 @@ const ParsonsBoard: React.FC = () => {
     );
 
     setDraggedItem(block);
-    e.currentTarget.classList.add('opacity-50');
+
+    // Only add opacity class if this is not a combined block (they handle their own styling)
+    if (!block.isCombined) {
+      e.currentTarget.classList.add('opacity-50');
+    }
   };
 
-  // Handle drag end
+  // Handle drag end - unified for both regular and combined blocks
   const handleDragEnd = (e: React.DragEvent) => {
+    console.log('Drag end');
     setDraggedItem(null);
-    e.currentTarget.classList.remove('opacity-50');
+
+    // Only remove opacity class if this is not a combined block
+    if (!e.currentTarget.classList.contains('opacity-50')) {
+      e.currentTarget.classList.remove('opacity-50');
+    }
   };
 
   // Allow drop
@@ -130,9 +141,11 @@ const ParsonsBoard: React.FC = () => {
   // Handle drop in sortable area
   const handleDropToSortable = (e: React.DragEvent, dropIndex?: number) => {
     e.preventDefault();
+    console.log('Drop to sortable at index:', dropIndex);
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      console.log('Drop data:', data);
 
       // If dropped from trash area
       if (data.area === 'trash') {
@@ -167,6 +180,7 @@ const ParsonsBoard: React.FC = () => {
   // Handle drop in trash area
   const handleDropToTrash = (e: React.DragEvent, dropIndex?: number) => {
     e.preventDefault();
+    console.log('Drop to trash at index:', dropIndex);
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
@@ -246,6 +260,8 @@ const ParsonsBoard: React.FC = () => {
           indentSize={currentProblem?.options.x_indent || 50}
           groupColor={block.groupColor}
           groupId={block.groupId}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
         />
       );
     } else {
@@ -264,9 +280,9 @@ const ParsonsBoard: React.FC = () => {
               handleDropToTrash(e, index);
             }
           }}
-          className={`flex items-center p-2 bg-white rounded shadow cursor-move border-2 ${
+          className={`flex items-center p-2 bg-white rounded shadow cursor-move border-2 transition-all duration-200 ${
             block.groupColor ? block.groupColor : 'border-gray-200'
-          }`}
+          } hover:shadow-md`}
           style={{
             paddingLeft: `${
               (block.indentation * (currentProblem?.options.x_indent || 50)) /
@@ -286,7 +302,7 @@ const ParsonsBoard: React.FC = () => {
                     }
                   }}
                   disabled={block.indentation === 0}
-                  className={`px-2 py-0.5 text-xs rounded ${
+                  className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     block.indentation === 0
                       ? 'bg-gray-200 text-gray-500'
                       : 'bg-gray-300 hover:bg-gray-400'
@@ -299,7 +315,7 @@ const ParsonsBoard: React.FC = () => {
                   onClick={() =>
                     changeIndentation(index, block.indentation + 1)
                   }
-                  className="px-2 py-0.5 text-xs bg-gray-300 hover:bg-gray-400 rounded"
+                  className="px-2 py-0.5 text-xs bg-gray-300 hover:bg-gray-400 rounded transition-colors"
                 >
                   →
                 </button>
@@ -316,66 +332,96 @@ const ParsonsBoard: React.FC = () => {
     }
   };
 
+  // Enhanced drop zone component with better visual feedback
+  const renderDropZone = (area: 'sortable' | 'trash', blocks: BlockItem[]) => {
+    const isDropZoneActive = draggedItem !== null;
+
+    return (
+      <div
+        className={`space-y-2 min-h-32 transition-all duration-200 ${
+          isDropZoneActive ? 'bg-blue-50 border-blue-200' : ''
+        }`}
+        onDragOver={handleDragOver}
+        onDrop={(e) => {
+          if (area === 'sortable') {
+            handleDropToSortable(e);
+          } else {
+            handleDropToTrash(e);
+          }
+        }}
+      >
+        {blocks.map((block, index) => renderBlock(block, index, area))}
+        {blocks.length === 0 && (
+          <div
+            className={`p-4 text-gray-500 border-2 border-dashed rounded h-32 flex items-center justify-center transition-all duration-200 ${
+              isDropZoneActive
+                ? 'border-blue-400 bg-blue-50 text-blue-600'
+                : 'border-gray-300'
+            }`}
+            onDragOver={handleDragOver}
+            onDrop={(e) => {
+              if (area === 'sortable') {
+                handleDropToSortable(e);
+              } else {
+                handleDropToTrash(e);
+              }
+            }}
+          >
+            {isDropZoneActive
+              ? `Drop ${
+                  draggedItem?.isCombined ? 'combined block' : 'block'
+                } here`
+              : area === 'sortable'
+              ? 'Drag code blocks here to build your solution'
+              : 'Drop blocks here'}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col md:flex-row gap-4 w-full">
       {/* Trash area */}
       {currentProblem?.options.trashId && (
         <div
-          className={`border-2 p-4 rounded-md min-h-64 w-full md:w-1/3 ${
+          className={`border-2 p-4 rounded-md min-h-64 w-full md:w-1/3 transition-colors ${
             isCorrect === false ? 'border-red-300' : 'border-gray-300'
           }`}
         >
-          <h3 className="text-lg font-semibold mb-2">Available Blocks</h3>
-          <div
-            className="space-y-2"
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDropToTrash(e)}
-          >
-            {trashBlocks.map((block, index) =>
-              renderBlock(block, index, 'trash')
+          <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <span className="mr-2">📦</span>
+            Available Blocks
+            {trashBlocks.length > 0 && (
+              <span className="ml-2 text-sm text-gray-500">
+                ({trashBlocks.length} blocks)
+              </span>
             )}
-            {trashBlocks.length === 0 && (
-              <div
-                className="p-4 text-gray-500 border border-dashed rounded h-16 flex items-center justify-center"
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDropToTrash(e)}
-              >
-                Drop blocks here
-              </div>
-            )}
-          </div>
+          </h3>
+          {renderDropZone('trash', trashBlocks)}
         </div>
       )}
 
       {/* Solution area */}
       <div
-        className={`border-2 p-4 rounded-md min-h-64 flex-1 ${
+        className={`border-2 p-4 rounded-md min-h-64 flex-1 transition-colors ${
           isCorrect === true
-            ? 'border-green-300'
+            ? 'border-green-300 bg-green-50'
             : isCorrect === false
-            ? 'border-red-300'
+            ? 'border-red-300 bg-red-50'
             : 'border-gray-300'
         }`}
       >
-        <h3 className="text-lg font-semibold mb-2">Your Solution</h3>
-        <div
-          className="space-y-2 min-h-32"
-          onDragOver={handleDragOver}
-          onDrop={(e) => handleDropToSortable(e)}
-        >
-          {sortableBlocks.map((block, index) =>
-            renderBlock(block, index, 'sortable')
+        <h3 className="text-lg font-semibold mb-2 flex items-center">
+          <span className="mr-2">🎯</span>
+          Your Solution
+          {sortableBlocks.length > 0 && (
+            <span className="ml-2 text-sm text-gray-500">
+              ({sortableBlocks.length} blocks)
+            </span>
           )}
-          {sortableBlocks.length === 0 && (
-            <div
-              className="p-4 text-gray-500 border border-dashed rounded h-32 flex items-center justify-center"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDropToSortable(e)}
-            >
-              Drag code blocks here to build your solution
-            </div>
-          )}
-        </div>
+        </h3>
+        {renderDropZone('sortable', sortableBlocks)}
       </div>
     </div>
   );
