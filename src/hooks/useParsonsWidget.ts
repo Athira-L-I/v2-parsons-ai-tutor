@@ -60,6 +60,87 @@ export interface UseParsonsWidgetReturn
   extends UseParsonsWidgetState,
     UseParsonsWidgetActions {}
 
+// Color palette for groups
+const GROUP_COLOR_PALETTE = [
+  'border-purple-200 bg-purple-50',
+  'border-indigo-200 bg-indigo-50',
+  'border-pink-200 bg-pink-50',
+  'border-teal-200 bg-teal-50',
+  'border-amber-200 bg-amber-50',
+];
+
+// Function to assign group colors
+const assignGroupColors = (pairedGroups: any[]): Record<number, string> => {
+  const groupColors: Record<number, string> = {};
+
+  pairedGroups.forEach((group, index) => {
+    groupColors[index] =
+      GROUP_COLOR_PALETTE[index % GROUP_COLOR_PALETTE.length];
+  });
+
+  return groupColors;
+};
+
+// Function to check for group conflicts in solution area
+const checkGroupConflict = (
+  solutionBlocks: BlockItem[],
+  newBlock: BlockItem
+): BlockItem | null => {
+  if (newBlock.groupId === undefined) {
+    return null; // No group, no conflict
+  }
+
+  // Find existing block in solution with same group ID
+  const conflictingBlock = solutionBlocks.find(
+    (block) => block.groupId === newBlock.groupId && block.id !== newBlock.id
+  );
+
+  return conflictingBlock || null;
+};
+
+// Function to resolve group conflict by moving conflicting block to trash
+const resolveGroupConflict = (
+  conflictingBlock: BlockItem,
+  solutionBlocks: BlockItem[],
+  trashBlocks: BlockItem[]
+): { newSolution: BlockItem[]; newTrash: BlockItem[] } => {
+  console.log(
+    'Resolving group conflict, moving block to trash:',
+    conflictingBlock.id
+  );
+
+  // Remove conflicting block from solution
+  const newSolution = solutionBlocks.filter(
+    (block) => block.id !== conflictingBlock.id
+  );
+
+  // Find the best position in trash to insert the conflicting block
+  // Try to place it adjacent to other blocks from the same group
+  const newTrash = [...trashBlocks];
+
+  if (conflictingBlock.groupId !== undefined) {
+    // Find other blocks from the same group in trash
+    const sameGroupBlocks = trashBlocks
+      .map((block, index) => ({ block, index }))
+      .filter(({ block }) => block.groupId === conflictingBlock.groupId);
+
+    if (sameGroupBlocks.length > 0) {
+      // Insert adjacent to the last block of the same group
+      const lastGroupBlockIndex =
+        sameGroupBlocks[sameGroupBlocks.length - 1].index;
+      newTrash.splice(lastGroupBlockIndex + 1, 0, conflictingBlock);
+    } else {
+      // No other group members in trash, add to end
+      newTrash.push(conflictingBlock);
+    }
+  } else {
+    // No group, add to end
+    newTrash.push(conflictingBlock);
+  }
+
+  return { newSolution, newTrash };
+};
+
 // Add a global debug counter to track hook instances
 let hookInstanceCounter = 0;
 
@@ -130,18 +211,12 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
         .split('\n')
         .filter((line) => line.trim());
 
-      // Group colors for paired distractors
-      const groupColors = [
-        'border-purple-200 bg-purple-50',
-        'border-indigo-200 bg-indigo-50',
-        'border-pink-200 bg-pink-50',
-        'border-teal-200 bg-teal-50',
-        'border-amber-200 bg-amber-50',
-      ];
-
       // Use the existing function to identify paired groups
       const pairedResult = identifyPairedDistractors(newSettings);
       const pairedGroups = pairedResult.pairedGroups;
+
+      // Assign colors to groups
+      const groupColors = assignGroupColors(pairedGroups);
 
       // Process each line and assign group information
       const processedBlocks: BlockItem[] = lines.map((line, index) => {
@@ -175,7 +250,7 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
               item.distractor === '' ? item.correct : item.distractor;
             if (itemText === cleanText) {
               assignedGroupId = groupIndex;
-              assignedGroupColor = groupColors[groupIndex % groupColors.length];
+              assignedGroupColor = groupColors[groupIndex];
               isPairedDistractor = item.distractor !== '';
             }
           });
@@ -271,47 +346,80 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       const newSourceArray = [...sourceArray];
       newSourceArray.splice(blockIndex, 1);
 
-      // Add to destination
-      const getTargetArray = (area: 'blocks' | 'solution' | 'trash') => {
-        switch (area) {
-          case 'blocks':
-            return blocks;
-          case 'solution':
-            return solution;
-          case 'trash':
-            return trash;
-        }
-      };
+      // Get target arrays
+      let newBlocks = [...blocks];
+      let newSolution = [...solution];
+      let newTrash = [...trash];
 
-      const targetArray = [...getTargetArray(toArea)];
-      const insertIndex =
-        newIndex !== undefined ? newIndex : targetArray.length;
-      targetArray.splice(insertIndex, 0, blockToMove);
-
-      // Update states
+      // Update source array
       switch (fromArea) {
         case 'blocks':
-          setBlocks(newSourceArray);
+          newBlocks = newSourceArray;
           break;
         case 'solution':
-          setSolution(newSourceArray);
+          newSolution = newSourceArray;
           break;
         case 'trash':
-          setTrash(newSourceArray);
+          newTrash = newSourceArray;
           break;
       }
+
+      // Check for group conflicts when moving to solution area
+      if (toArea === 'solution') {
+        const conflictingBlock = checkGroupConflict(newSolution, blockToMove);
+
+        if (conflictingBlock) {
+          console.log('Group conflict detected:', {
+            newBlock: blockToMove.id,
+            conflictingBlock: conflictingBlock.id,
+            groupId: blockToMove.groupId,
+          });
+
+          // Resolve conflict by moving conflicting block to trash
+          const resolved = resolveGroupConflict(
+            conflictingBlock,
+            newSolution,
+            newTrash
+          );
+          newSolution = resolved.newSolution;
+          newTrash = resolved.newTrash;
+
+          // Show message about conflict resolution
+          setAdaptationMessage(
+            `Moved conflicting block from Group ${
+              (blockToMove.groupId || 0) + 1
+            } to trash area. Only one block per group allowed in solution.`
+          );
+          setTimeout(() => setAdaptationMessage(null), 3000);
+        }
+      }
+
+      // Add block to target area
+      const insertIndex =
+        newIndex !== undefined
+          ? newIndex
+          : toArea === 'solution'
+          ? newSolution.length
+          : toArea === 'trash'
+          ? newTrash.length
+          : newBlocks.length;
 
       switch (toArea) {
         case 'blocks':
-          setBlocks(targetArray);
+          newBlocks.splice(insertIndex, 0, blockToMove);
           break;
         case 'solution':
-          setSolution(targetArray);
+          newSolution.splice(insertIndex, 0, blockToMove);
           break;
         case 'trash':
-          setTrash(targetArray);
+          newTrash.splice(insertIndex, 0, blockToMove);
           break;
       }
+
+      // Update all states
+      setBlocks(newBlocks);
+      setSolution(newSolution);
+      setTrash(newTrash);
     },
     [blocks, solution, trash, instanceId]
   );
