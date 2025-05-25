@@ -167,18 +167,39 @@ const CombinedBlock: React.FC<
         )}
       </div>
 
-      {/* Code lines with visual separators */}
+      {/* Code lines with visual separators and proper indentation display */}
       <div className="space-y-1 bg-gray-50 p-2 rounded">
-        {(lines || []).map((line, lineIndex) => (
-          <div key={lineIndex}>
-            <pre className="font-mono text-sm text-gray-800 leading-tight whitespace-pre-wrap">
-              {line}
-            </pre>
-            {lineIndex < lines.length - 1 && (
-              <div className="border-b border-gray-300 my-1 opacity-50"></div>
-            )}
-          </div>
-        ))}
+        {(lines || []).map((line, lineIndex) => {
+          // Calculate the actual indentation for this subLine
+          const subLineRelativeIndent = Math.floor(
+            (line.match(/^(\s*)/)?.[1].length || 0) / 4
+          );
+          const totalIndent = indentation + subLineRelativeIndent;
+          const cleanLine = line.trim();
+
+          return (
+            <div key={lineIndex}>
+              <div className="flex items-start">
+                {/* Visual indentation indicator */}
+                {totalIndent > 0 && (
+                  <span className="text-xs text-green-600 font-mono mr-1">
+                    {'····'.repeat(totalIndent)}
+                  </span>
+                )}
+                <pre className="font-mono text-sm text-gray-800 leading-tight whitespace-pre-wrap flex-1">
+                  {cleanLine}
+                </pre>
+                {/* Show actual indentation level for debugging */}
+                <span className="text-xs text-gray-400 ml-2">
+                  [{totalIndent}]
+                </span>
+              </div>
+              {lineIndex < lines.length - 1 && (
+                <div className="border-b border-gray-300 my-1 opacity-50"></div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Footer indicator */}

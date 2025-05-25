@@ -474,58 +474,102 @@ export function provideIndentation(
 /**
  * Generates indentation hints for student guidance
  */
+// Enhanced version that properly supports combined blocks
 export function generateIndentationHints(
   studentSolution: string[],
   correctSolution: string[]
 ): IndentationHint[] {
   const hints: IndentationHint[] = [];
 
-  const maxLength = Math.min(studentSolution.length, correctSolution.length);
-  for (let i = 0; i < maxLength; i++) {
-    const studentLine = studentSolution[i];
-    const correctLine = correctSolution[i];
+  // Step 1: Expand both student and correct solutions to handle combined blocks
+  const expandedStudentSolution = expandCombinedBlocks(studentSolution);
+  const expandedCorrectSolution = expandCombinedBlocks(correctSolution);
+
+  // Step 2: Create a map of correct content to expected indentation
+  const correctIndentMap = new Map<string, number>();
+  expandedCorrectSolution.forEach((line) => {
+    const content = line.trim();
+    if (content && !content.includes('#distractor')) {
+      correctIndentMap.set(content, getIndentLevel(line));
+    }
+  });
+
+  // Step 3: Analyze student solution line by line
+  expandedStudentSolution.forEach((studentLine, index) => {
+    const studentContent = studentLine.trim();
     const studentIndent = getIndentLevel(studentLine);
-    const correctIndent = getIndentLevel(correctLine);
 
-    if (studentIndent !== correctIndent) {
+    if (!studentContent) return; // Skip empty lines
+
+    const expectedIndent = correctIndentMap.get(studentContent);
+
+    if (expectedIndent !== undefined && studentIndent !== expectedIndent) {
       let hint = '';
+      const indentDiff = expectedIndent - studentIndent;
 
-      if (studentIndent < correctIndent) {
+      if (indentDiff > 0) {
         hint = `Line ${
-          i + 1
-        } should be indented more. It should be inside a code block.`;
+          index + 1
+        } "${studentContent}" should be indented ${indentDiff} more level${
+          indentDiff > 1 ? 's' : ''
+        }.`;
       } else {
         hint = `Line ${
-          i + 1
-        } should be indented less. It should be at a higher level.`;
+          index + 1
+        } "${studentContent}" should be indented ${Math.abs(
+          indentDiff
+        )} fewer level${Math.abs(indentDiff) > 1 ? 's' : ''}.`;
       }
 
-      // Add context-specific hints
-      const trimmedLine = studentLine.trim();
-      if (
-        trimmedLine.startsWith('if ') ||
-        trimmedLine.startsWith('for ') ||
-        trimmedLine.startsWith('while ')
-      ) {
-        hint += ' Control structures define new code blocks.';
+      // Add context-specific hints based on code content
+      if (studentContent.endsWith(':')) {
+        hint += ' Lines ending with ":" introduce new code blocks.';
+      } else if (studentContent.startsWith('return ')) {
+        hint += ' Return statements are usually inside functions.';
       } else if (
-        trimmedLine.startsWith('else:') ||
-        trimmedLine.startsWith('elif ')
+        studentContent.startsWith('else:') ||
+        studentContent.startsWith('elif ')
       ) {
         hint += ' This should align with the matching if statement.';
-      } else if (trimmedLine.startsWith('return ')) {
-        hint += ' Return statements are usually inside functions.';
+      } else if (
+        /^(if|for|while|def|class|try|except|finally|with)[\s\(]/.test(
+          studentContent
+        )
+      ) {
+        hint +=
+          ' Code inside this block should be indented relative to this line.';
       }
 
       hints.push({
-        lineIndex: i,
+        lineIndex: index,
         currentIndent: studentIndent,
-        expectedIndent: correctIndent,
+        expectedIndent,
         hint,
       });
     }
-  }
+  });
+
   return hints;
+}
+
+/**
+ * Expands solution arrays to handle combined blocks (marked with \n or actual newlines)
+ */
+function expandCombinedBlocks(solution: string[]): string[] {
+  const expanded: string[] = [];
+
+  solution.forEach((line) => {
+    if (line.includes('\n')) {
+      // This is a combined block - split it into individual lines
+      const subLines = line.split('\n');
+      expanded.push(...subLines);
+    } else {
+      // Regular single line
+      expanded.push(line);
+    }
+  });
+
+  return expanded;
 }
 
 /**

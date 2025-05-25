@@ -7,7 +7,7 @@ export const enum ParsonsGrader {
   VariableCheck = 'ParsonsWidget._graders.VariableCheckGrader',
   UnitTest = 'ParsonsWidget._graders.UnitTestGrader',
   LanguageTranslation = 'ParsonsWidget._graders.LanguageTranslationGrader',
-  Turtle = 'ParsonsWidget._graders.TurtleGrader'
+  Turtle = 'ParsonsWidget._graders.TurtleGrader',
 }
 
 export interface VariableTest {
@@ -20,7 +20,7 @@ export interface VariableTest {
 }
 
 export interface ToggleTypeHandler {
-  'boolean'?: string[];
+  boolean?: string[];
   compop?: string[];
   mathop?: string[];
   boolop?: string[];

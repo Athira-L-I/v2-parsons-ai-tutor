@@ -1,149 +1,118 @@
 import React from 'react';
-import { ParsonsSettings } from '@/@types/types';
+import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
 import IndentationHelper from './IndentationHelper';
-import {
-  generateIndentationHints,
-  IndentationHint,
-} from '@/lib/adaptiveFeatures';
-
-interface BlockItem {
-  id: string;
-  text: string;
-  indentation: number;
-  isDistractor?: boolean;
-  originalIndex: number;
-  groupId?: number;
-  groupColor?: string;
-  isPairedDistractor?: boolean;
-  isCombined?: boolean;
-  subLines?: string[];
-}
+import { generateIndentationHints } from '@/lib/adaptiveFeatures';
 
 interface IndentationControlsProps {
-  settings: ParsonsSettings;
-  currentSolution: BlockItem[];
-  onChangeIndentation: (blockId: string, newIndent: number) => void;
-  onApplyHint: (blockId: string, lineIndex: number) => void;
   className?: string;
 }
 
 const IndentationControls: React.FC<IndentationControlsProps> = ({
-  settings,
-  currentSolution,
-  onChangeIndentation,
-  onApplyHint,
   className = '',
 }) => {
-  const isProvided = settings.options.can_indent === false;
+  const {
+    currentProblem: settings,
+    currentBlocks: currentSolution,
+    setCurrentBlocks,
+    setUserSolution,
+  } = useParsonsContext();
 
-  // Generate current solution lines for hint calculation
-  const getCurrentSolutionLines = (): string[] => {
-    const lines: string[] = [];
-    currentSolution.forEach((block) => {
-      const blockIndent = '    '.repeat(block.indentation);
-      if (block.isCombined && block.subLines) {
-        block.subLines.forEach((subLine) => {
-          // For combined blocks, apply the block's indentation to each subLine
-          // If the subLine already has indentation, preserve the relative structure
-          const trimmedSubLine = subLine.trim();
-          const subLineIndent = subLine.match(/^(\s*)/)?.[1] || '';
-          const additionalIndent = Math.floor(subLineIndent.length / 4);
-          const totalIndent = '    '.repeat(
-            block.indentation + additionalIndent
-          );
-          lines.push(`${totalIndent}${trimmedSubLine}`);
-        });
-      } else {
-        lines.push(`${blockIndent}${block.text}`);
-      }
-    });
-    return lines;
-  };
+  if (!settings) {
+    return null;
+  }
 
-  // Generate expected solution lines from settings
-  const getExpectedSolutionLines = (): string[] => {
-    const correctCodeLines = settings.initial
+  const isManualMode = settings.options.can_indent !== false;
+  const isHelperMode = settings.options.can_indent === false;
+
+  // Generate current and expected lines, and mapping for hints
+  const generateSolutionData = () => {
+    const currentLines: string[] = [];
+    const expectedLines: string[] = [];
+    const lineToBlockMapping: Array<{
+      blockId: string;
+      subLineIndex?: number;
+    }> = [];
+
+    const allCorrectLines = settings.initial
       .split('\n')
       .filter((line) => line.trim() && !line.includes('#distractor'));
 
-    const expectedLines: string[] = [];
     currentSolution.forEach((block) => {
       if (block.isCombined && block.subLines) {
-        block.subLines.forEach((subLine) => {
-          const cleanSubLine = subLine.trim();
-          const matchingCorrectLine = correctCodeLines.find(
-            (correctLine) => correctLine.trim() === cleanSubLine
+        block.subLines.forEach((subLine, subIndex) => {
+          const subLineRelativeIndent = Math.floor(
+            (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
           );
-          if (matchingCorrectLine) {
-            expectedLines.push(matchingCorrectLine);
-          } else {
-            expectedLines.push(subLine);
-          }
+          const totalIndent = block.indentation + subLineRelativeIndent;
+          const indentString = '    '.repeat(totalIndent);
+          const cleanSubLine = subLine.trim();
+          currentLines.push(`${indentString}${cleanSubLine}`);
+
+          const matchingExpectedLine = allCorrectLines.find(
+            (expectedLine) => expectedLine.trim() === cleanSubLine
+          );
+          expectedLines.push(matchingExpectedLine || subLine);
+
+          lineToBlockMapping.push({
+            blockId: block.id,
+            subLineIndex: subIndex,
+          });
         });
       } else {
-        const cleanBlockText = block.text.trim();
-        const matchingCorrectLine = correctCodeLines.find(
-          (correctLine) => correctLine.trim() === cleanBlockText
+        const indentString = '    '.repeat(block.indentation);
+        currentLines.push(`${indentString}${block.text}`);
+
+        const matchingExpectedLine = allCorrectLines.find(
+          (expectedLine) => expectedLine.trim() === block.text.trim()
         );
-        if (matchingCorrectLine) {
-          expectedLines.push(matchingCorrectLine);
-        } else {
-          expectedLines.push(block.text);
-        }
+        expectedLines.push(matchingExpectedLine || block.text);
+
+        lineToBlockMapping.push({
+          blockId: block.id,
+        });
       }
     });
-    return expectedLines;
+
+    return { currentLines, expectedLines, lineToBlockMapping };
   };
 
-  const hints = generateIndentationHints(
-    getCurrentSolutionLines(),
-    getExpectedSolutionLines()
-  );
+  const { currentLines, expectedLines, lineToBlockMapping } =
+    generateSolutionData();
+  const hints = generateIndentationHints(currentLines, expectedLines);
 
-  if (isProvided) {
-    return (
-      <IndentationHelper
-        hints={hints}
-        onApplyHint={(lineIndex: number) => {
-          // Find which block corresponds to this line index
-          let currentLineIndex = 0;
-          let targetBlockId = '';
-          let expectedIndent = 0;
+  // Update both context and userSolution when indentation changes
+  const updateSolutionAndContext = (updatedBlocks: BlockItem[]) => {
+    // Update context with current block structure
+    setCurrentBlocks(updatedBlocks);
 
-          // Find the hint for this line to get expected indentation
-          const relevantHint = hints.find(
-            (hint) => hint.lineIndex === lineIndex
-          );
-          if (relevantHint) {
-            expectedIndent = relevantHint.expectedIndent;
-          }
+    // Update userSolution for backward compatibility
+    const solution = updatedBlocks.map((block) => {
+      const indent = '    '.repeat(block.indentation);
 
-          for (const block of currentSolution) {
-            let blockLineCount = 1;
-            if (block.isCombined && block.subLines) {
-              blockLineCount = block.subLines.length;
-            }
+      if (block.isCombined && block.subLines) {
+        return block.subLines
+          .map((subLine) => {
+            const hasIndent = /^\s+/.test(subLine);
+            return hasIndent ? subLine : indent + subLine.trim();
+          })
+          .join('\n');
+      } else {
+        return `${indent}${block.text}`;
+      }
+    });
 
-            if (
-              lineIndex >= currentLineIndex &&
-              lineIndex < currentLineIndex + blockLineCount
-            ) {
-              targetBlockId = block.id;
-              break;
-            }
-            currentLineIndex += blockLineCount;
-          }
+    setUserSolution(solution);
+  };
 
-          if (targetBlockId) {
-            // Use the onChangeIndentation callback instead of onApplyHint
-            // This will directly update the indentation
-            onChangeIndentation(targetBlockId, expectedIndent);
-          }
-        }}
-        className={className}
-      />
+  const onChangeIndentation = (blockId: string, newIndent: number) => {
+    const updatedBlocks = currentSolution.map((block) =>
+      block.id === blockId
+        ? { ...block, indentation: Math.max(0, newIndent) }
+        : block
     );
-  }
+
+    updateSolutionAndContext(updatedBlocks);
+  };
 
   const handleIndentDecrease = (blockId: string, currentIndent: number) => {
     if (currentIndent > 0) {
@@ -155,6 +124,31 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
     onChangeIndentation(blockId, currentIndent + 1);
   };
 
+  const handleApplyHint = (lineIndex: number) => {
+    if (lineIndex >= lineToBlockMapping.length || lineIndex >= hints.length) {
+      console.warn('Line index out of bounds for hint application');
+      return;
+    }
+
+    const mapping = lineToBlockMapping[lineIndex];
+    const hint = hints[lineIndex];
+
+    // Apply the hint by setting the correct indentation
+    onChangeIndentation(mapping.blockId, hint.expectedIndent);
+  };
+
+  // Show IndentationHelper when indentation is PROVIDED (can_indent === false)
+  if (isHelperMode) {
+    return (
+      <IndentationHelper
+        hints={hints}
+        onApplyHint={handleApplyHint}
+        className={className}
+      />
+    );
+  }
+
+  // Show manual controls when indentation is NOT provided (can_indent === true)
   return (
     <div
       className={`manual-indentation-controls bg-white p-4 rounded-lg border ${className}`}
@@ -187,16 +181,28 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
                       <span className="text-purple-600 font-medium">
                         📦 Combined Block ({block.subLines?.length || 0} lines)
                       </span>
+                      <span className="text-xs text-blue-600 font-mono ml-2">
+                        Indent: {block.indentation}
+                      </span>
                       {block.subLines && (
                         <div className="mt-1 ml-4 text-xs text-gray-600">
-                          {block.subLines.slice(0, 2).map((line, i) => (
-                            <div key={i}>{line.trim()}</div>
-                          ))}
-                          {block.subLines.length > 2 && (
-                            <div className="text-gray-400">
-                              ... and {block.subLines.length - 2} more
-                            </div>
-                          )}
+                          {block.subLines.map((line, i) => {
+                            const subLineRelativeIndent = Math.floor(
+                              (line.match(/^(\s*)/)?.[1].length || 0) / 4
+                            );
+                            const totalIndent =
+                              block.indentation + subLineRelativeIndent;
+                            return (
+                              <div key={i} className="flex items-center">
+                                <span>
+                                  {'  '.repeat(totalIndent)}└─ {line.trim()}
+                                </span>
+                                <span className="ml-2 text-gray-400">
+                                  [{totalIndent}]
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -207,8 +213,8 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
               </div>
 
               <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-500 min-w-16">
-                  Indent: {block.indentation}
+                <span className="text-sm text-gray-500 min-w-20">
+                  Base Indent: {block.indentation}
                 </span>
 
                 <div className="flex space-x-1">
@@ -243,37 +249,68 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
             </div>
           ))}
 
-          {/* Validation Status */}
+          {/* Show current indentation issues even in manual mode */}
+          {hints.length > 0 && (
+            <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
+              <h4 className="font-medium text-orange-800 mb-2">
+                ⚠️ Current Indentation Issues:
+              </h4>
+              <p className="text-sm text-orange-700 mb-2">
+                Found {hints.length} indentation issue
+                {hints.length !== 1 ? 's' : ''} that need fixing:
+              </p>
+              <ul className="text-sm text-orange-700 space-y-1">
+                {hints.slice(0, 3).map((hint, index) => (
+                  <li key={index} className="flex items-start">
+                    <span className="mr-2 text-orange-500">•</span>
+                    <span>
+                      Line {hint.lineIndex + 1}: {hint.hint}
+                    </span>
+                  </li>
+                ))}
+                {hints.length > 3 && (
+                  <li className="text-orange-600 italic">
+                    ... and {hints.length - 3} more issues
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {hints.length === 0 && (
+            <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center text-green-800">
+                <span className="mr-2">✅</span>
+                <span className="font-medium">
+                  All indentation looks correct!
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Manual mode tips */}
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">
             <h4 className="font-medium text-blue-800 mb-2">
-              💡 Indentation Tips:
+              💡 Manual Indentation Tips:
             </h4>
             <ul className="text-sm text-blue-700 space-y-1">
+              <li>
+                • Adjust the "Base Indent" to move entire blocks (including all
+                sublines)
+              </li>
+              <li>
+                • Combined blocks maintain relative indentation between their
+                sublines
+              </li>
               <li>
                 • Code inside functions, if statements, and loops should be
                 indented
               </li>
               <li>
-                • Use consistent indentation levels (typically 4 spaces per
-                level)
-              </li>
-              <li>
-                • Lines at the same logical level should have the same
-                indentation
-              </li>
-              <li>
-                • else, elif, except align with their matching if/try statements
+                • Use consistent indentation levels (typically 1 level = 4
+                spaces)
               </li>
             </ul>
-
-            {hints.length > 0 && (
-              <div className="mt-2 p-2 bg-orange-100 rounded text-orange-800">
-                <span className="font-medium">
-                  ⚠️ Indentation Issues Found:
-                </span>{' '}
-                {hints.length} problem(s) detected
-              </div>
-            )}
           </div>
         </div>
       )}

@@ -17,6 +17,7 @@ const TestIntegrationPage: React.FC = () => {
         return 0
     total = sum(numbers)
     return total / len(numbers)
+if not numbers:\\n    return 0
 print("Hello World") #distractor
 x = 5 #distractor`,
     options: {
@@ -34,6 +35,7 @@ x = 5 #distractor`,
         return 0
     total = sum(numbers)
     return total / len(numbers)
+if not numbers:\\n    return 0
 print("Hello World") #distractor
 x = 5 #distractor`,
     options: {

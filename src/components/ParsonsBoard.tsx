@@ -21,8 +21,13 @@ interface BlockItem {
 }
 
 const ParsonsBoard: React.FC = () => {
-  const { currentProblem, userSolution, setUserSolution, isCorrect } =
-    useParsonsContext();
+  const {
+    currentProblem,
+    userSolution,
+    setUserSolution,
+    isCorrect,
+    setCurrentBlocks, // Add this
+  } = useParsonsContext();
 
   const [sortableBlocks, setSortableBlocks] = useState<BlockItem[]>([]);
   const [trashBlocks, setTrashBlocks] = useState<BlockItem[]>([]);
@@ -156,7 +161,7 @@ const ParsonsBoard: React.FC = () => {
     // Note: We don't reset to 0 when switching to manual mode to preserve user's work
   }, [currentProblem?.options.can_indent]); // Only when indentation mode changes
 
-  // Update the solution in the context for validation
+  // Update the solution in the context AND share block data
   const updateSolution = (blocks: BlockItem[]) => {
     const solution = blocks.map((block) => {
       const indent = '    '.repeat(block.indentation);
@@ -176,6 +181,11 @@ const ParsonsBoard: React.FC = () => {
     });
 
     setUserSolution(solution);
+
+    // Share the block data with context for unified indentation logic
+    if (setCurrentBlocks) {
+      setCurrentBlocks(blocks);
+    }
   };
 
   // Handle indentation changes from IndentationControls
@@ -191,22 +201,99 @@ const ParsonsBoard: React.FC = () => {
     updateSolution(updateBlocks(sortableBlocks));
   };
 
-  // Handle applying indentation hints
+  // Handle applying indentation hints - CONSISTENT WITH IndentationControls
   const handleApplyIndentationHint = (blockId: string, lineIndex: number) => {
     if (!currentProblem) return;
 
-    // Generate expected solution lines
-    const expectedSolutionLines = currentProblem.initial
+    // Build the same line-to-block mapping as IndentationControls
+    const lineToBlockMapping: Array<{
+      blockId: string;
+      subLineIndex?: number;
+    }> = [];
+
+    sortableBlocks.forEach((block) => {
+      if (block.isCombined && block.subLines) {
+        block.subLines.forEach((subLine, subIndex) => {
+          lineToBlockMapping.push({
+            blockId: block.id,
+            subLineIndex: subIndex,
+          });
+        });
+      } else {
+        lineToBlockMapping.push({
+          blockId: block.id,
+        });
+      }
+    });
+
+    // Generate current and expected lines for hint calculation
+    const currentLines: string[] = [];
+    const expectedLines: string[] = [];
+
+    const allCorrectLines = currentProblem.initial
       .split('\n')
       .filter((line) => line.trim() && !line.includes('#distractor'));
 
-    if (lineIndex < expectedSolutionLines.length) {
-      const expectedLine = expectedSolutionLines[lineIndex];
-      const expectedIndent = Math.floor(
-        (expectedLine.match(/^(\s*)/)?.[1].length || 0) / 4
-      );
+    sortableBlocks.forEach((block) => {
+      if (block.isCombined && block.subLines) {
+        block.subLines.forEach((subLine) => {
+          const subLineRelativeIndent = Math.floor(
+            (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
+          );
+          const totalIndent = block.indentation + subLineRelativeIndent;
+          const indentString = '    '.repeat(totalIndent);
+          const cleanSubLine = subLine.trim();
+          currentLines.push(`${indentString}${cleanSubLine}`);
 
-      changeIndentation(blockId, expectedIndent);
+          const matchingExpectedLine = allCorrectLines.find(
+            (expectedLine) => expectedLine.trim() === cleanSubLine
+          );
+          expectedLines.push(matchingExpectedLine || subLine);
+        });
+      } else {
+        const indentString = '    '.repeat(block.indentation);
+        currentLines.push(`${indentString}${block.text}`);
+
+        const matchingExpectedLine = allCorrectLines.find(
+          (expectedLine) => expectedLine.trim() === block.text.trim()
+        );
+        expectedLines.push(matchingExpectedLine || block.text);
+      }
+    });
+
+    const hints = generateIndentationHints(currentLines, expectedLines);
+
+    if (lineIndex >= lineToBlockMapping.length || lineIndex >= hints.length) {
+      console.warn('Line index out of bounds for hint application');
+      return;
+    }
+
+    const mapping = lineToBlockMapping[lineIndex];
+    const hint = hints[lineIndex];
+    const targetBlock = sortableBlocks.find((b) => b.id === mapping.blockId);
+
+    if (targetBlock?.isCombined && mapping.subLineIndex !== undefined) {
+      // For combined blocks, calculate the base indentation needed
+      const subLine = targetBlock.subLines?.[mapping.subLineIndex];
+      if (subLine) {
+        const subLineRelativeIndent = Math.floor(
+          (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
+        );
+        const newBlockIndent = Math.max(
+          0,
+          hint.expectedIndent - subLineRelativeIndent
+        );
+        changeIndentation(targetBlock.id, newBlockIndent);
+        console.log(
+          `Applied hint to combined block ${targetBlock.id}: base indent = ${newBlockIndent} for subLine ${mapping.subLineIndex}`
+        );
+      }
+    } else {
+      // For regular blocks, apply the indentation directly
+      changeIndentation(mapping.blockId, hint.expectedIndent);
+      console.log(
+        `Applied hint to regular block ${mapping.blockId}: indent = ${hint.expectedIndent}`
+      );
     }
   };
 

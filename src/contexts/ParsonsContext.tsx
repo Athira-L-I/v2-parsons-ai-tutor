@@ -9,11 +9,30 @@ import { ParsonsSettings, ParsonsOptions } from '@/@types/types';
 import { AdaptiveState } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
+// Add BlockItem interface to context types
+interface BlockItem {
+  id: string;
+  text: string;
+  indentation: number;
+  isDistractor?: boolean;
+  originalIndex?: number;
+  groupId?: number;
+  groupColor?: string;
+  isPairedDistractor?: boolean;
+  isCombined?: boolean;
+  subLines?: string[];
+}
+
 interface ParsonsContextType {
   currentProblem: ParsonsSettings | null;
   setCurrentProblem: (problem: ParsonsSettings) => void;
   userSolution: string[];
   setUserSolution: (solution: string[]) => void;
+
+  // NEW: Add current blocks structure
+  currentBlocks: BlockItem[];
+  setCurrentBlocks: (blocks: BlockItem[]) => void;
+
   feedback: string | null;
   socraticFeedback: string | null;
   setFeedback: (feedback: string | null) => void;
@@ -40,6 +59,8 @@ const defaultContext: ParsonsContextType = {
   setCurrentProblem: () => {},
   userSolution: [],
   setUserSolution: () => {},
+  currentBlocks: [],
+  setCurrentBlocks: () => {},
   feedback: null,
   socraticFeedback: null,
   setFeedback: () => {},
@@ -74,6 +95,7 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     null
   );
   const [userSolution, setUserSolution] = useState<string[]>([]);
+  const [currentBlocks, setCurrentBlocks] = useState<BlockItem[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [socraticFeedback, setSocraticFeedback] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -127,6 +149,7 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
   const resetContext = useCallback(() => {
     setCurrentProblem(null);
     setUserSolution([]);
+    setCurrentBlocks([]);
     setFeedback(null);
     setSocraticFeedback(null);
     setIsCorrect(null);
@@ -160,6 +183,8 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
         setCurrentProblem,
         userSolution,
         setUserSolution,
+        currentBlocks,
+        setCurrentBlocks,
         feedback,
         setFeedback,
         socraticFeedback,
@@ -185,3 +210,6 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     </ParsonsContext.Provider>
   );
 };
+
+// Export the BlockItem type for use in other components
+export type { BlockItem };

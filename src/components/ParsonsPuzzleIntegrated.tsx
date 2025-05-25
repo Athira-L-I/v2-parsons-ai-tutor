@@ -12,21 +12,22 @@ interface ParsonsPuzzleIntegratedProps {
   onCheckSolution?: (isCorrect: boolean) => void;
 }
 
-const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({ 
+const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
   problemId,
   title = 'Parsons Problem',
   description = 'Rearrange the code blocks to form a correct solution.',
-  onCheckSolution 
+  onCheckSolution,
 }) => {
-  const { currentProblem, isCorrect, setUserSolution } = useParsonsContext();
+  const { currentProblem, isCorrect, setUserSolution, setCurrentBlocks } =
+    useParsonsContext();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  
+
   // Load the Parsons widget dependencies
   useEffect(() => {
     if (!isParsonsWidgetLoaded()) {
       setIsLoading(true);
-      
+
       loadParsonsWidget()
         .then((success) => {
           if (!success) {
@@ -43,13 +44,16 @@ const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
       setIsLoading(false);
     }
   }, []);
-  
+
   // Add this to call onCheckSolution when solution is checked
-  const handleSolutionChange = (solution: string[]) => {
+  const handleSolutionChange = (solution: string[], blocks?: BlockItem[]) => {
     setUserSolution(solution);
+    if (setCurrentBlocks && blocks) {
+      setCurrentBlocks(blocks);
+    }
     // No need to call onCheckSolution here, it will be called after checking the solution
   };
-  
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -57,27 +61,32 @@ const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
       </div>
     );
   }
-  
+
   if (loadError) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        <p><strong>Error:</strong> {loadError}</p>
-        <p>Please try refreshing the page or contact support if the problem persists.</p>
+        <p>
+          <strong>Error:</strong> {loadError}
+        </p>
+        <p>
+          Please try refreshing the page or contact support if the problem
+          persists.
+        </p>
       </div>
     );
   }
-  
+
   // Pass onCheckSolution to ParsonsWidget
   return (
     <div className="parsons-puzzle-integrated">
       {currentProblem && (
-        <ParsonsWidgetComponent 
+        <ParsonsWidgetComponent
           problemId={problemId}
           onSolutionChange={handleSolutionChange}
           onCheckSolution={onCheckSolution}
         />
       )}
-      
+
       {!currentProblem && (
         <div className="text-center py-8 text-gray-500">
           <p>No problem loaded. Please select a problem to get started.</p>

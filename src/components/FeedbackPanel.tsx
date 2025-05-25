@@ -1,31 +1,78 @@
 import React from 'react';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
 import { generateIndentationHints } from '@/lib/adaptiveFeatures';
 
 const FeedbackPanel: React.FC = () => {
-  // Use both feedback types from context
   const {
     feedback,
     socraticFeedback,
     isCorrect,
     isLoading,
     currentProblem,
-    userSolution,
+    currentBlocks, // Now available from context
   } = useParsonsContext();
 
-  // Generate indentation hints for current solution
-  const getIndentationHints = () => {
-    if (!currentProblem || !userSolution.length) return [];
+  // Use the EXACT same logic as IndentationControls
+  const generateSolutionData = () => {
+    if (!currentProblem || !currentBlocks || currentBlocks.length === 0) {
+      return { currentLines: [], expectedLines: [], lineToBlockMapping: [] };
+    }
 
-    // Generate expected solution lines
-    const expectedSolutionLines = currentProblem.initial
+    const currentLines: string[] = [];
+    const expectedLines: string[] = [];
+    const lineToBlockMapping: Array<{
+      blockId: string;
+      subLineIndex?: number;
+    }> = [];
+
+    const allCorrectLines = currentProblem.initial
       .split('\n')
       .filter((line) => line.trim() && !line.includes('#distractor'));
 
-    return generateIndentationHints(userSolution, expectedSolutionLines);
+    currentBlocks.forEach((block) => {
+      if (block.isCombined && block.subLines) {
+        block.subLines.forEach((subLine, subIndex) => {
+          const subLineRelativeIndent = Math.floor(
+            (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
+          );
+          const totalIndent = block.indentation + subLineRelativeIndent;
+          const indentString = '    '.repeat(totalIndent);
+          const cleanSubLine = subLine.trim();
+          currentLines.push(`${indentString}${cleanSubLine}`);
+
+          const matchingExpectedLine = allCorrectLines.find(
+            (expectedLine) => expectedLine.trim() === cleanSubLine
+          );
+          expectedLines.push(matchingExpectedLine || subLine);
+
+          lineToBlockMapping.push({
+            blockId: block.id,
+            subLineIndex: subIndex,
+          });
+        });
+      } else {
+        const indentString = '    '.repeat(block.indentation);
+        currentLines.push(`${indentString}${block.text}`);
+
+        const matchingExpectedLine = allCorrectLines.find(
+          (expectedLine) => expectedLine.trim() === block.text.trim()
+        );
+        expectedLines.push(matchingExpectedLine || block.text);
+
+        lineToBlockMapping.push({
+          blockId: block.id,
+        });
+      }
+    });
+
+    return { currentLines, expectedLines, lineToBlockMapping };
   };
 
-  const indentationHints = getIndentationHints();
+  const { currentLines, expectedLines } = generateSolutionData();
+  const indentationHints = generateIndentationHints(
+    currentLines,
+    expectedLines
+  );
   const isIndentationProvided = currentProblem?.options.can_indent === false;
 
   // If there's no problem loaded, don't show feedback
@@ -57,6 +104,48 @@ const FeedbackPanel: React.FC = () => {
                 with the hints below.
               </div>
 
+              {/* Indentation Issues - Only show when indentation is NOT provided */}
+              {!isIndentationProvided && indentationHints.length > 0 && (
+                <div className="prose max-w-none mb-4">
+                  <h4 className="text-md font-medium mb-2 flex items-center">
+                    <span className="mr-2"></span>
+                    Indentation Issues ({indentationHints.length})
+                  </h4>
+                  <div className="bg-orange-50 border border-orange-200 rounded p-3 text-sm">
+                    <p className="text-orange-700 mb-2">
+                      Found {indentationHints.length} indentation issue
+                      {indentationHints.length !== 1 ? 's' : ''}:
+                    </p>
+                    <ul className="space-y-1">
+                      🔧
+                      {indentationHints.slice(0, 3).map((hint, index) => (
+                        <li key={index} className="flex items-start">
+                          <span className="mr-2 text-orange-500">•</span>
+                          <span className="text-orange-700">
+                            <strong>Line {hint.lineIndex + 1}:</strong>{' '}
+                            {hint.hint}
+                            <span className="text-xs ml-2 text-orange-600">
+                              (Current: {hint.currentIndent}, Expected:{' '}
+                              {hint.expectedIndent})
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                      {indentationHints.length > 3 && (
+                        <li className="text-orange-600 italic">
+                          ... and {indentationHints.length - 3} more indentation
+                          issues
+                        </li>
+                      )}
+                    </ul>
+                    <div className="mt-2 p-2 bg-orange-100 rounded text-xs text-orange-800">
+                      💡 Use the indentation controls below your solution to fix
+                      these issues.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Parsons Widget Feedback */}
               {feedback && (
                 <div className="prose max-w-none mb-4">
@@ -72,7 +161,7 @@ const FeedbackPanel: React.FC = () => {
 
               {/* Socratic Feedback */}
               {socraticFeedback && (
-                <div className="prose max-w-none mb-4">
+                <div className="prose max-w-none">
                   <h4 className="text-md font-medium mb-2">Learning Hint:</h4>
                   <div
                     className="bg-white p-3 rounded border text-sm border-blue-200 bg-blue-50"
@@ -81,16 +170,19 @@ const FeedbackPanel: React.FC = () => {
                 </div>
               )}
 
-              {!feedback && !socraticFeedback && (
-                <p className="text-gray-500 italic mb-4">
-                  Check your code ordering and indentation for errors.
-                </p>
-              )}
+              {!feedback &&
+                !socraticFeedback &&
+                !isIndentationProvided &&
+                indentationHints.length === 0 && (
+                  <p className="text-gray-500 italic">
+                    Check your code ordering and indentation for errors.
+                  </p>
+                )}
             </div>
           )}
 
-          {/* Indentation Status Section */}
-          {currentProblem && userSolution.length > 0 && (
+          {/* Indentation Status Section - Show for all cases when there are blocks */}
+          {currentBlocks.length > 0 && (
             <div className="mt-4">
               <h4 className="text-md font-medium mb-2">Indentation Status:</h4>
 
@@ -131,17 +223,18 @@ const FeedbackPanel: React.FC = () => {
                         these issues.
                       </p>
                       <ul className="text-sm text-orange-700 space-y-1">
-                        {indentationHints.slice(0, 3).map((hint, index) => (
+                        {indentationHints.slice(0, 2).map((hint, index) => (
                           <li key={index} className="flex items-start">
                             <span className="mr-2 text-orange-500">•</span>
                             <span>
-                              Line {hint.lineIndex + 1}: {hint.hint}
+                              Line {hint.lineIndex + 1}: Expected indent{' '}
+                              {hint.expectedIndent}, got {hint.currentIndent}
                             </span>
                           </li>
                         ))}
-                        {indentationHints.length > 3 && (
+                        {indentationHints.length > 2 && (
                           <li className="text-orange-600 italic">
-                            ... and {indentationHints.length - 3} more issues
+                            ... and {indentationHints.length - 2} more issues
                           </li>
                         )}
                       </ul>
@@ -152,7 +245,13 @@ const FeedbackPanel: React.FC = () => {
             </div>
           )}
 
-          {isCorrect === null && (
+          {isCorrect === null && currentBlocks.length === 0 && (
+            <p className="text-gray-500 italic">
+              Arrange some code blocks and submit your solution to get feedback
+            </p>
+          )}
+
+          {isCorrect === null && currentBlocks.length > 0 && (
             <p className="text-gray-500 italic">
               Submit your solution to get feedback
             </p>
