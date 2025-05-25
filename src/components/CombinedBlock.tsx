@@ -27,7 +27,9 @@ interface CombinedBlockProps {
   onDragEnd?: (e: React.DragEvent) => void;
 }
 
-const CombinedBlock: React.FC<CombinedBlockProps> = ({
+const CombinedBlock: React.FC<
+  CombinedBlockProps & { isDragging?: boolean }
+> = ({
   id,
   index,
   lines = [],
@@ -41,6 +43,7 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
   groupId,
   onDragStart,
   onDragEnd,
+  isDragging = false,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -81,7 +84,7 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
     );
 
     e.dataTransfer.effectAllowed = 'move';
-    e.currentTarget.classList.add('opacity-50');
+    // e.currentTarget.classList.add('opacity-50');
 
     // Call the parent's drag start handler if provided
     if (onDragStart) {
@@ -92,7 +95,7 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
   // Handle native drag end
   const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
     console.log('CombinedBlock drag end:', id);
-    e.currentTarget.classList.remove('opacity-50');
+    // e.currentTarget.classList.remove('opacity-50');
 
     if (onDragEnd) {
       onDragEnd(e);
@@ -114,12 +117,16 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
       onDragOver={handleDragOver}
       className={`flex flex-col p-2 bg-white rounded shadow cursor-move border-2 transition-all duration-200 ${
         groupColor ? groupColor : 'border-gray-200'
-      } hover:shadow-md`}
-      style={{ paddingLeft: `${(indentation * indentSize) / 16 + 8}px` }}
+      } hover:shadow-md ${isDragging ? 'opacity-50' : ''}`}
+      style={{
+        marginLeft: `${indentation * indentSize}px`,
+        paddingLeft: '8px',
+      }}
     >
       {/* Header with controls and group indicator */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-2">
+          {/* Only show manual indentation controls when can_indent is true */}
           {canIndent && area === 'sortable' && (
             <div className="flex space-x-1">
               <button
@@ -146,6 +153,11 @@ const CombinedBlock: React.FC<CombinedBlockProps> = ({
           <span className="text-xs text-gray-500 font-medium">
             📦 Combined Block ({lines?.length ?? 0} lines)
           </span>
+          {!canIndent && area === 'sortable' && (
+            <span className="text-xs text-green-600 font-medium ml-2">
+              ✓ Indentation Provided
+            </span>
+          )}
         </div>
 
         {groupId !== undefined && (
