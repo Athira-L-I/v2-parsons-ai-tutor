@@ -5,6 +5,7 @@ import {
   isIndentationProvided,
   identifyPairedDistractors,
   combineBlocks,
+  generateIndentationHints,
 } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
@@ -21,6 +22,13 @@ export interface BlockItem {
   subLines?: string[];
 }
 
+export interface IndentationHint {
+  lineIndex: number;
+  currentIndent: number;
+  expectedIndent: number;
+  hint: string;
+}
+
 export interface UseParsonsWidgetState {
   isInitialized: boolean;
   isLoading: boolean;
@@ -33,6 +41,7 @@ export interface UseParsonsWidgetState {
   adaptiveState: AdaptiveState;
   adaptationMessage: string | null;
   isIndentationProvided: boolean;
+  currentIndentationHints: IndentationHint[];
 }
 
 export interface UseParsonsWidgetActions {
@@ -46,6 +55,12 @@ export interface UseParsonsWidgetActions {
     toArea: 'blocks' | 'solution' | 'trash',
     newIndex?: number
   ) => void;
+  // NEW: Batch move function
+  moveMultipleBlocks: (
+    blockIds: string[],
+    fromArea: 'blocks' | 'solution' | 'trash',
+    toArea: 'blocks' | 'solution' | 'trash'
+  ) => void;
   incrementAttempts: (isCorrect: boolean) => void;
   triggerAdaptation: () => void;
   createCombinedBlock: (
@@ -54,6 +69,11 @@ export interface UseParsonsWidgetActions {
   ) => void;
   splitCombinedBlock: (combinedBlockId: string) => void;
   applyCombineBlocksAdaptation: () => void;
+  generateCurrentIndentationHints: () => IndentationHint[];
+  applyIndentationHint: (blockId: string, lineIndex: number) => void;
+  validateCurrentIndentation: () => { isValid: boolean; errors: string[] };
+  setBlockIndentation: (blockId: string, newIndentation: number) => void;
+  randomizeIndentation: () => void;
 }
 
 export interface UseParsonsWidgetReturn
@@ -68,6 +88,13 @@ const GROUP_COLOR_PALETTE = [
   'border-teal-200 bg-teal-50',
   'border-amber-200 bg-amber-50',
 ];
+
+// Function to get indentation level from a line of code
+const getIndentLevel = (line: string): number => {
+  const match = line.match(/^(\s*)/);
+  if (!match) return 0;
+  return Math.floor(match[1].length / 4);
+};
 
 // Function to assign group colors
 const assignGroupColors = (pairedGroups: any[]): Record<number, string> => {
@@ -168,6 +195,75 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
     null
   );
 
+  // Computed properties for indentation management
+  const isIndentationProvidedValue = settings
+    ? settings.options.can_indent === false
+    : false;
+
+  const generateCurrentIndentationHints = useCallback((): IndentationHint[] => {
+    if (!settings || !solution.length) return [];
+
+    // Get the current solution lines in the exact order they appear in the solution area
+    const currentSolutionLines: string[] = [];
+
+    solution.forEach((block) => {
+      const indent = '    '.repeat(block.indentation);
+      if (block.isCombined && block.subLines) {
+        // For combined blocks, add each subline with proper indentation
+        block.subLines.forEach((subLine) => {
+          currentSolutionLines.push(`${indent}${subLine.trim()}`);
+        });
+      } else {
+        currentSolutionLines.push(`${indent}${block.text}`);
+      }
+    });
+
+    // Get the expected solution by mapping current solution blocks to their correct lines
+    const expectedSolutionLines: string[] = [];
+    const correctCodeLines = settings.initial
+      .split('\n')
+      .filter((line) => line.trim() && !line.includes('#distractor'));
+
+    solution.forEach((block) => {
+      if (block.isCombined && block.subLines) {
+        // For combined blocks, find the original lines and add them
+        block.subLines.forEach((subLine) => {
+          const cleanSubLine = subLine.trim();
+          // Find the matching line in correct code
+          const matchingCorrectLine = correctCodeLines.find(
+            (correctLine) => correctLine.trim() === cleanSubLine
+          );
+          if (matchingCorrectLine) {
+            expectedSolutionLines.push(matchingCorrectLine);
+          } else {
+            // Fallback: preserve the original structure
+            expectedSolutionLines.push(subLine);
+          }
+        });
+      } else {
+        // For single blocks, find the matching line in correct code
+        const cleanBlockText = block.text.trim();
+        const matchingCorrectLine = correctCodeLines.find(
+          (correctLine) => correctLine.trim() === cleanBlockText
+        );
+        if (matchingCorrectLine) {
+          expectedSolutionLines.push(matchingCorrectLine);
+        } else {
+          // Fallback: use the block text as-is (for cases where block text might not match exactly)
+          expectedSolutionLines.push(block.text);
+        }
+      }
+    });
+
+    // Generate hints by comparing current vs expected indentation
+    return generateIndentationHints(
+      currentSolutionLines,
+      expectedSolutionLines
+    );
+  }, [settings, solution]);
+
+  const currentIndentationHints = generateCurrentIndentationHints();
+
   // Debug effect to track settings changes
   useEffect(() => {
     console.log(`Instance ${instanceId}: settings changed to:`, settings);
@@ -231,10 +327,17 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
         const isCombined = cleanLine.includes('\\n');
         let subLines: string[] | undefined;
         let displayText = cleanLine.trimStart();
+        let correctIndentation = 0;
 
         if (isCombined) {
-          subLines = cleanLine.split('\\n').map((subLine) => subLine.trim());
+          subLines = cleanLine.split('\\n');
           displayText = `${subLines.length} combined lines`;
+          // Use the indentation of the first line in the combined block
+          correctIndentation = getIndentLevel(subLines[0]);
+        } else {
+          // For single lines, preserve original indentation when can_indent is false
+          correctIndentation = getIndentLevel(line);
+          displayText = cleanLine.trim();
         }
 
         let assignedGroupId: number | undefined;
@@ -242,7 +345,7 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
         let isPairedDistractor = false;
 
         // Find which group this line belongs to
-        const cleanText = isCombined ? subLines![0] : cleanLine.trim();
+        const cleanText = isCombined ? subLines![0].trim() : cleanLine.trim();
 
         pairedGroups.forEach((group, groupIndex) => {
           group.forEach((item) => {
@@ -259,7 +362,9 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
         return {
           id: `block-${index}`,
           text: displayText,
-          indentation: 0,
+          // When indentation is provided (can_indent: false), use correct indentation
+          indentation:
+            newSettings.options.can_indent === false ? correctIndentation : 0,
           isDistractor: isDistractor || isPaired,
           originalIndex: index,
           groupId: assignedGroupId,
@@ -289,10 +394,6 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
 
   const toggleAdaptiveFeatures = useCallback(() => {
     console.log(`Instance ${instanceId}: toggleAdaptiveFeatures() called`);
-    console.log(
-      `Instance ${instanceId}: Current settings before toggle:`,
-      settings
-    );
 
     setAdaptiveFeaturesEnabled((prev) => {
       const newValue = !prev;
@@ -301,7 +402,188 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       );
       return newValue;
     });
-  }, [settings, instanceId]);
+  }, [instanceId]);
+
+  const setBlockIndentation = useCallback(
+    (blockId: string, newIndentation: number) => {
+      console.log(`Instance ${instanceId}: setBlockIndentation() called`, {
+        blockId,
+        newIndentation,
+      });
+
+      // Update indentation in all areas
+      const updateIndentationInArray = (blocks: BlockItem[]): BlockItem[] => {
+        return blocks.map((block) =>
+          block.id === blockId
+            ? { ...block, indentation: Math.max(0, newIndentation) }
+            : block
+        );
+      };
+
+      setBlocks(updateIndentationInArray);
+      setSolution(updateIndentationInArray);
+      setTrash(updateIndentationInArray);
+    },
+    [instanceId]
+  );
+
+  const randomizeIndentation = useCallback(() => {
+    console.log(`Instance ${instanceId}: randomizeIndentation() called`);
+
+    if (!settings || settings.options.can_indent === false) {
+      console.log('Cannot randomize indentation: indentation is provided');
+      setAdaptationMessage(
+        'Cannot randomize indentation when indentation is provided'
+      );
+      setTimeout(() => setAdaptationMessage(null), 3000);
+      return;
+    }
+
+    // Randomize indentation for all solution blocks
+    const updatedSolution = solution.map((block) => ({
+      ...block,
+      indentation: Math.floor(Math.random() * 4), // 0, 1, 2, or 3
+    }));
+
+    setSolution(updatedSolution);
+    setAdaptationMessage('Randomized indentation for testing');
+    setTimeout(() => setAdaptationMessage(null), 2000);
+  }, [solution, settings, instanceId]);
+
+  // NEW: Batch move function that handles multiple blocks in a single state update
+  const moveMultipleBlocks = useCallback(
+    (
+      blockIds: string[],
+      fromArea: 'blocks' | 'solution' | 'trash',
+      toArea: 'blocks' | 'solution' | 'trash'
+    ) => {
+      console.log(`Instance ${instanceId}: moveMultipleBlocks() called`, {
+        blockIds,
+        fromArea,
+        toArea,
+        count: blockIds.length,
+      });
+
+      if (blockIds.length === 0) {
+        console.warn('No blocks to move');
+        return;
+      }
+
+      // Get current state snapshots
+      let sourceBlocks: BlockItem[] = [];
+      let newBlocks = [...blocks];
+      let newSolution = [...solution];
+      let newTrash = [...trash];
+
+      // Identify source blocks
+      switch (fromArea) {
+        case 'blocks':
+          sourceBlocks = newBlocks;
+          break;
+        case 'solution':
+          sourceBlocks = newSolution;
+          break;
+        case 'trash':
+          sourceBlocks = newTrash;
+          break;
+      }
+
+      // Find all blocks to move (preserve their order)
+      const blocksToMove: BlockItem[] = [];
+      blockIds.forEach((blockId) => {
+        const block = sourceBlocks.find((b) => b.id === blockId);
+        if (block) {
+          blocksToMove.push({ ...block }); // Create copy to preserve indentation
+        } else {
+          console.warn(`Block ${blockId} not found in ${fromArea} area`);
+        }
+      });
+
+      if (blocksToMove.length === 0) {
+        console.warn('No valid blocks found to move');
+        return;
+      }
+
+      // Remove all blocks to move from source area
+      const blocksToMoveIds = new Set(blocksToMove.map((b) => b.id));
+
+      switch (fromArea) {
+        case 'blocks':
+          newBlocks = newBlocks.filter((b) => !blocksToMoveIds.has(b.id));
+          break;
+        case 'solution':
+          newSolution = newSolution.filter((b) => !blocksToMoveIds.has(b.id));
+          break;
+        case 'trash':
+          newTrash = newTrash.filter((b) => !blocksToMoveIds.has(b.id));
+          break;
+      }
+
+      // Handle group conflicts if moving to solution area
+      const conflictMessages: string[] = [];
+
+      if (toArea === 'solution') {
+        // Check for group conflicts and resolve them
+        blocksToMove.forEach((blockToMove) => {
+          const conflictingBlock = checkGroupConflict(newSolution, blockToMove);
+
+          if (conflictingBlock) {
+            console.log('Group conflict detected for block:', blockToMove.id);
+
+            // Resolve conflict by moving conflicting block to trash
+            const resolved = resolveGroupConflict(
+              conflictingBlock,
+              newSolution,
+              newTrash
+            );
+            newSolution = resolved.newSolution;
+            newTrash = resolved.newTrash;
+
+            conflictMessages.push(
+              `Moved conflicting block from Group ${
+                (blockToMove.groupId || 0) + 1
+              } to trash`
+            );
+          }
+        });
+      }
+
+      // Add all blocks to target area
+      switch (toArea) {
+        case 'blocks':
+          newBlocks.push(...blocksToMove);
+          break;
+        case 'solution':
+          newSolution.push(...blocksToMove);
+          break;
+        case 'trash':
+          newTrash.push(...blocksToMove);
+          break;
+      }
+
+      // Update all states at once (atomic update)
+      setBlocks(newBlocks);
+      setSolution(newSolution);
+      setTrash(newTrash);
+
+      // Show success message
+      let message = `Moved ${blocksToMove.length} block${
+        blocksToMove.length > 1 ? 's' : ''
+      } from ${fromArea} to ${toArea}`;
+
+      if (conflictMessages.length > 0) {
+        message += `. ${conflictMessages.join(', ')}`;
+      }
+
+      setAdaptationMessage(message);
+      setTimeout(() => setAdaptationMessage(null), 3000);
+
+      console.log(
+        `Instance ${instanceId}: Successfully moved ${blocksToMove.length} blocks`
+      );
+    },
+    [blocks, solution, trash, instanceId]
+  );
 
   const moveBlock = useCallback(
     (
@@ -317,111 +599,10 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
         newIndex,
       });
 
-      // Find the block to move
-      let blockToMove: BlockItem | undefined;
-      let sourceArray: BlockItem[] = [];
-
-      // Get source array and find block
-      switch (fromArea) {
-        case 'blocks':
-          sourceArray = blocks;
-          break;
-        case 'solution':
-          sourceArray = solution;
-          break;
-        case 'trash':
-          sourceArray = trash;
-          break;
-      }
-
-      const blockIndex = sourceArray.findIndex((block) => block.id === blockId);
-      if (blockIndex === -1) {
-        console.error('Block not found:', blockId);
-        return;
-      }
-
-      blockToMove = sourceArray[blockIndex];
-
-      // Remove from source
-      const newSourceArray = [...sourceArray];
-      newSourceArray.splice(blockIndex, 1);
-
-      // Get target arrays
-      let newBlocks = [...blocks];
-      let newSolution = [...solution];
-      let newTrash = [...trash];
-
-      // Update source array
-      switch (fromArea) {
-        case 'blocks':
-          newBlocks = newSourceArray;
-          break;
-        case 'solution':
-          newSolution = newSourceArray;
-          break;
-        case 'trash':
-          newTrash = newSourceArray;
-          break;
-      }
-
-      // Check for group conflicts when moving to solution area
-      if (toArea === 'solution') {
-        const conflictingBlock = checkGroupConflict(newSolution, blockToMove);
-
-        if (conflictingBlock) {
-          console.log('Group conflict detected:', {
-            newBlock: blockToMove.id,
-            conflictingBlock: conflictingBlock.id,
-            groupId: blockToMove.groupId,
-          });
-
-          // Resolve conflict by moving conflicting block to trash
-          const resolved = resolveGroupConflict(
-            conflictingBlock,
-            newSolution,
-            newTrash
-          );
-          newSolution = resolved.newSolution;
-          newTrash = resolved.newTrash;
-
-          // Show message about conflict resolution
-          setAdaptationMessage(
-            `Moved conflicting block from Group ${
-              (blockToMove.groupId || 0) + 1
-            } to trash area. Only one block per group allowed in solution.`
-          );
-          setTimeout(() => setAdaptationMessage(null), 3000);
-        }
-      }
-
-      // Add block to target area
-      const insertIndex =
-        newIndex !== undefined
-          ? newIndex
-          : toArea === 'solution'
-          ? newSolution.length
-          : toArea === 'trash'
-          ? newTrash.length
-          : newBlocks.length;
-
-      switch (toArea) {
-        case 'blocks':
-          newBlocks.splice(insertIndex, 0, blockToMove);
-          break;
-        case 'solution':
-          newSolution.splice(insertIndex, 0, blockToMove);
-          break;
-        case 'trash':
-          newTrash.splice(insertIndex, 0, blockToMove);
-          break;
-      }
-
-      // Update all states
-      setBlocks(newBlocks);
-      setSolution(newSolution);
-      setTrash(newTrash);
+      // For single block moves, use the batch move function
+      moveMultipleBlocks([blockId], fromArea, toArea);
     },
-    [blocks, solution, trash, instanceId]
+    [moveMultipleBlocks, instanceId]
   );
 
   const incrementAttempts = useCallback(
@@ -429,10 +610,6 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
       console.log(
         `Instance ${instanceId}: incrementAttempts() called with isCorrect:`,
         isCorrect
-      );
-      console.log(
-        `Instance ${instanceId}: Current settings when incrementing:`,
-        settings
       );
 
       const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
@@ -452,15 +629,11 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
         );
       }
     },
-    [adaptiveState, adaptiveFeaturesEnabled, settings, instanceId]
+    [adaptiveState, adaptiveFeaturesEnabled, instanceId]
   );
 
   const triggerAdaptation = useCallback(() => {
     console.log(`Instance ${instanceId}: triggerAdaptation() called`);
-    console.log(
-      `Instance ${instanceId}: Current settings when triggering:`,
-      settings
-    );
 
     if (!settings) {
       console.warn('Cannot trigger adaptation: no settings available');
@@ -701,6 +874,86 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
     }
   }, [settings, updateSettings, instanceId]);
 
+  const applyIndentationHint = useCallback(
+    (blockId: string, lineIndex: number) => {
+      console.log(
+        `Instance ${instanceId}: applyIndentationHint() called with blockId: ${blockId}, lineIndex: ${lineIndex}`
+      );
+
+      if (!settings) {
+        console.warn('No settings available for applying indentation hint');
+        return;
+      }
+
+      const hints = generateCurrentIndentationHints();
+      const relevantHint = hints.find((hint) => hint.lineIndex === lineIndex);
+
+      if (!relevantHint) {
+        console.warn('No hint found for line index:', lineIndex);
+        return;
+      }
+
+      // Find which block corresponds to this line index
+      let currentLineIndex = 0;
+      let targetBlockIndex = -1;
+
+      for (let i = 0; i < solution.length; i++) {
+        const block = solution[i];
+        let blockLineCount = 1;
+
+        if (block.isCombined && block.subLines) {
+          blockLineCount = block.subLines.length;
+        }
+
+        if (
+          lineIndex >= currentLineIndex &&
+          lineIndex < currentLineIndex + blockLineCount
+        ) {
+          targetBlockIndex = i;
+          break;
+        }
+
+        currentLineIndex += blockLineCount;
+      }
+
+      if (targetBlockIndex === -1) {
+        console.warn('Could not find block for line index:', lineIndex);
+        return;
+      }
+
+      // Apply the correct indentation to the block
+      const updatedSolution = [...solution];
+      updatedSolution[targetBlockIndex] = {
+        ...updatedSolution[targetBlockIndex],
+        indentation: relevantHint.expectedIndent,
+      };
+
+      setSolution(updatedSolution);
+      console.log(
+        `Applied indentation hint: set block at index ${targetBlockIndex} to indent level ${relevantHint.expectedIndent}`
+      );
+    },
+    [solution, settings, generateCurrentIndentationHints, instanceId]
+  );
+
+  const validateCurrentIndentation = useCallback((): {
+    isValid: boolean;
+    errors: string[];
+  } => {
+    const hints = generateCurrentIndentationHints();
+    const errors = hints.map(
+      (hint) =>
+        `Line ${hint.lineIndex + 1}: Expected indent ${
+          hint.expectedIndent
+        }, got ${hint.currentIndent}`
+    );
+
+    return {
+      isValid: hints.length === 0,
+      errors,
+    };
+  }, [generateCurrentIndentationHints]);
+
   return {
     isInitialized,
     isLoading,
@@ -712,16 +965,23 @@ export const useParsonsWidget = (): UseParsonsWidgetReturn => {
     trash,
     adaptiveState,
     adaptationMessage,
-    isIndentationProvided: settings ? isIndentationProvided(settings) : false,
+    isIndentationProvided: isIndentationProvidedValue,
+    currentIndentationHints,
     initialize,
     cleanup,
     updateSettings,
     toggleAdaptiveFeatures,
     moveBlock,
+    moveMultipleBlocks, // NEW: Export the batch move function
     incrementAttempts,
     triggerAdaptation,
     createCombinedBlock,
     splitCombinedBlock,
     applyCombineBlocksAdaptation,
+    generateCurrentIndentationHints,
+    applyIndentationHint,
+    validateCurrentIndentation,
+    setBlockIndentation,
+    randomizeIndentation,
   };
 };
