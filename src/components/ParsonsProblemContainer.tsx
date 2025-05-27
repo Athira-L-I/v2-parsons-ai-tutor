@@ -600,8 +600,6 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
             onCheckSolution={handleCheckComplete}
           />
 
-          <FeedbackPanel />
-
           {/* Show current solution for debugging */}
           {userSolution.length > 0 &&
             process.env.NODE_ENV === 'development' && (

@@ -22,9 +22,7 @@ const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
   // description = 'Rearrange the code blocks to form a correct solution.', // Removed default
   onCheckSolution,
 }) => {
-  const {
-    currentProblem,
-  } = useParsonsContext(); // Removed setUserSolution, setCurrentBlocks, isCorrect
+  const { currentProblem } = useParsonsContext(); // Removed setUserSolution, setCurrentBlocks, isCorrect
 
   // If there's no problem loaded, don't show anything
   if (!currentProblem) {
@@ -55,19 +53,6 @@ const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
       <div className="mt-6">
         <FeedbackPanel />
       </div>
-
-      {/* Debug info in development - simplified */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
-          <p>
-            <strong>Problem ID:</strong> {problemId || 'N/A'}
-          </p>
-          <p>
-            <strong>Current Problem Loaded:</strong>{' '}
-            {currentProblem ? 'Yes' : 'No'}
-          </p>
-        </div>
-      )}
     </div>
   );
 };
