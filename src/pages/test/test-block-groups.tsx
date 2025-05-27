@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NextPage } from 'next';
-import { useParsonsWidget, BlockItem } from '@/hooks/useParsonsWidget';
+import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
 import { ParsonsSettings, ParsonsGrader } from '@/@types/types';
 
 const sampleProblemWithGroups: ParsonsSettings = {
@@ -58,7 +58,7 @@ const BlockDisplay: React.FC<{ block: BlockItem }> = ({ block }) => {
 
 const TestBlockGroups: NextPage = () => {
   const { settings, blocks, solution, trash, updateSettings, cleanup } =
-    useParsonsWidget();
+    useParsonsContext();
 
   const [showGroupInfo, setShowGroupInfo] = useState(false);
 

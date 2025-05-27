@@ -56,16 +56,15 @@ x = 5 #distractor`,
         <div className="max-w-6xl mx-auto px-4">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Test: Indentation Controls Integration
+              Test: Integration with Fixed Context
             </h1>
             <p className="text-gray-600 mb-4">
-              Test the complete integration of indentation controls with
-              adaptive features.
+              Test the integration with unified ParsonsContext.
             </p>
 
             {/* Adaptive Mode Toggle */}
             <div className="flex items-center space-x-4 mb-6 p-4 bg-white rounded border">
-              <span className="font-medium text-gray-700">Adaptive Mode:</span>
+              <span className="font-medium text-gray-700">Mode:</span>
               <button
                 onClick={() => setAdaptiveMode('manual')}
                 className={`px-4 py-2 rounded transition-colors ${
@@ -109,13 +108,13 @@ x = 5 #distractor`,
             {/* Set the current problem in context */}
             <ProblemSetter problem={currentProblem} />
 
-            {/* Main Parsons Board with integrated indentation controls */}
+            {/* Main Parsons Board */}
             <ParsonsBoard />
 
             {/* Solution Checker */}
             <SolutionChecker />
 
-            {/* Feedback Panel with indentation feedback */}
+            {/* Feedback Panel */}
             <FeedbackPanel />
           </div>
 
@@ -126,16 +125,14 @@ x = 5 #distractor`,
             </h3>
             <ul className="text-sm text-blue-700 space-y-1">
               <li>
-                • <strong>Manual Mode:</strong> Drag blocks to solution area and
-                use indent/outdent buttons on blocks
+                • <strong>Manual Mode:</strong> Drag blocks and use indentation
+                controls
               </li>
               <li>
-                • <strong>Provided Mode:</strong> Indentation is automatic,
-                focus on block order
+                • <strong>Provided Mode:</strong> Indentation is automatic
               </li>
-              <li>• Check the indentation controls below the solution area</li>
-              <li>• Check the feedback panel for indentation status</li>
-              <li>• Toggle between modes to see smooth transitions</li>
+              <li>• Check feedback panel for status</li>
+              <li>• Toggle between modes to test transitions</li>
             </ul>
           </div>
         </div>

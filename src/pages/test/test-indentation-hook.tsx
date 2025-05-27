@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { NextPage } from 'next';
-import {
-  useParsonsWidgetContext,
-  ParsonsWidgetProvider,
-} from '@/contexts/ParsonsWidgetContext';
+import { useParsonsContext } from '@/contexts/ParsonsContext';
 import { ParsonsSettings, ParsonsGrader } from '@/@types/types';
 
 // Test settings with blocks that will go to solution area (no trashId)
@@ -61,7 +58,7 @@ const TestContent: React.FC = () => {
     setBlockIndentation,
     randomizeIndentation,
     cleanup,
-  } = useParsonsWidgetContext();
+  } = useParsonsContext();
 
   const [validationResult, setValidationResult] = useState<{
     isValid: boolean;
@@ -546,11 +543,7 @@ const TestContent: React.FC = () => {
 
 // Main component that provides the context
 const TestIndentationHook: NextPage = () => {
-  return (
-    <ParsonsWidgetProvider>
-      <TestContent />
-    </ParsonsWidgetProvider>
-  );
+  return <TestContent />;
 };
 
 export default TestIndentationHook;

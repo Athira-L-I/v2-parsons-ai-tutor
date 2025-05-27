@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { NextPage } from 'next';
-import { useParsonsWidget, BlockItem } from '@/hooks/useParsonsWidget';
+import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
 import { ParsonsSettings, ParsonsGrader } from '@/@types/types';
 
 const sampleProblem: ParsonsSettings = {
@@ -83,7 +83,7 @@ const TestCombinedHook: NextPage = () => {
     createCombinedBlock,
     splitCombinedBlock,
     applyCombineBlocksAdaptation,
-  } = useParsonsWidget();
+  } = useParsonsContext();
 
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
   const [targetArea, setTargetArea] = useState<'blocks' | 'solution' | 'trash'>(

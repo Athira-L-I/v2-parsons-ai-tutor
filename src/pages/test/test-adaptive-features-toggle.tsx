@@ -1,9 +1,6 @@
 import React from 'react';
 import { NextPage } from 'next';
-import {
-  useParsonsWidgetContext,
-  ParsonsWidgetProvider,
-} from '@/contexts/ParsonsWidgetContext'; // Changed imports
+import { useParsonsContext } from '@/contexts/ParsonsContext';
 import AdaptiveFeaturesToggle from '@/components/AdaptiveFeaturesToggle';
 import { ParsonsSettings, ParsonsGrader } from '@/@types/types';
 
@@ -36,7 +33,7 @@ const TestContent: React.FC = () => {
     updateSettings,
     incrementAttempts,
     cleanup,
-  } = useParsonsWidgetContext(); // Changed hook call
+  } = useParsonsContext(); // Changed hook call
 
   const handleLoadSettings = () => {
     updateSettings(sampleSettings);
@@ -184,11 +181,7 @@ const TestContent: React.FC = () => {
 
 // Main component that provides the context
 const TestAdaptiveFeaturesToggle: NextPage = () => {
-  return (
-    <ParsonsWidgetProvider>
-      <TestContent />
-    </ParsonsWidgetProvider>
-  );
+  return <TestContent />;
 };
 
 export default TestAdaptiveFeaturesToggle;

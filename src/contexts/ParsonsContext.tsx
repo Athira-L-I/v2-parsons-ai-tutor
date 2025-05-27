@@ -1,3 +1,8 @@
+/**
+ * Enhanced ParsonsContext with integrated adaptive features
+ * src/contexts/ParsonsContext.tsx
+ */
+
 import {
   createContext,
   useContext,
@@ -5,12 +10,12 @@ import {
   useState,
   useCallback,
 } from 'react';
-import { ParsonsSettings, ParsonsOptions } from '@/@types/types';
+import { ParsonsSettings } from '@/@types/types';
 import { AdaptiveState } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
 // Add BlockItem interface to context types
-interface BlockItem {
+export interface BlockItem {
   id: string;
   text: string;
   indentation: number;
@@ -24,15 +29,17 @@ interface BlockItem {
 }
 
 interface ParsonsContextType {
+  // Core problem state
   currentProblem: ParsonsSettings | null;
   setCurrentProblem: (problem: ParsonsSettings) => void;
   userSolution: string[];
   setUserSolution: (solution: string[]) => void;
 
-  // NEW: Add current blocks structure
+  // Block structure for advanced indentation management
   currentBlocks: BlockItem[];
   setCurrentBlocks: (blocks: BlockItem[]) => void;
 
+  // Feedback and correctness
   feedback: string | null;
   socraticFeedback: string | null;
   setFeedback: (feedback: string | null) => void;
@@ -41,18 +48,33 @@ interface ParsonsContextType {
   setIsCorrect: (isCorrect: boolean | null) => void;
   isLoading: boolean;
   setIsLoading: (isLoading: boolean) => void;
+
+  // Attempt tracking
   attempts: number;
   incrementAttempts: () => void;
+
+  // Adaptive features - now integrated
+  adaptiveState: AdaptiveState;
+  setAdaptiveState: (state: AdaptiveState) => void;
+  adaptationMessage: string | null;
+  setAdaptationMessage: (message: string | null) => void;
+
+  // Utility functions
   handleFeedback: (feedback: any) => void;
   resetContext: () => void;
 
-  // Adaptive features
-  adaptiveState: AdaptiveState;
-  setAdaptiveState: (state: AdaptiveState) => void;
-  triggerAdaptation: () => void;
-  adaptationMessage: string | null;
-  setAdaptationMessage: (message: string | null) => void;
+  // Adaptive feature helpers
+  updateAdaptiveStateAfterAttempt: (isCorrect: boolean) => void;
+  canTriggerAdaptation: () => boolean;
+  getAdaptationSuggestions: () => string[];
 }
+
+const defaultAdaptiveState = (): AdaptiveState => ({
+  attempts: 0,
+  incorrectAttempts: 0,
+  combinedBlocks: 0,
+  removedDistractors: 0,
+});
 
 const defaultContext: ParsonsContextType = {
   currentProblem: null,
@@ -71,26 +93,33 @@ const defaultContext: ParsonsContextType = {
   setIsLoading: () => {},
   attempts: 0,
   incrementAttempts: () => {},
-  handleFeedback: () => {},
-  resetContext: () => {},
-
-  // Adaptive features
-  adaptiveState: adaptiveController.createInitialState(),
+  adaptiveState: defaultAdaptiveState(),
   setAdaptiveState: () => {},
-  triggerAdaptation: () => {},
   adaptationMessage: null,
   setAdaptationMessage: () => {},
+  handleFeedback: () => {},
+  resetContext: () => {},
+  updateAdaptiveStateAfterAttempt: () => {},
+  canTriggerAdaptation: () => false,
+  getAdaptationSuggestions: () => [],
 };
 
 const ParsonsContext = createContext<ParsonsContextType>(defaultContext);
 
-export const useParsonsContext = () => useContext(ParsonsContext);
+export const useParsonsContext = () => {
+  const context = useContext(ParsonsContext);
+  if (!context) {
+    throw new Error('useParsonsContext must be used within a ParsonsProvider');
+  }
+  return context;
+};
 
 interface ParsonsProviderProps {
   children: ReactNode;
 }
 
 export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
+  // Core state
   const [currentProblem, setCurrentProblem] = useState<ParsonsSettings | null>(
     null
   );
@@ -101,52 +130,62 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [attempts, setAttempts] = useState<number>(0);
+
+  // Adaptive features state
   const [adaptiveState, setAdaptiveState] = useState<AdaptiveState>(
-    adaptiveController.createInitialState()
+    defaultAdaptiveState()
   );
   const [adaptationMessage, setAdaptationMessage] = useState<string | null>(
     null
   );
 
+  // Enhanced increment attempts with adaptive state management
   const incrementAttempts = useCallback(() => {
     setAttempts((prev) => {
       const newAttempts = prev + 1;
-
-      // Update adaptive state after attempt
-      const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
-        adaptiveState,
-        isCorrect === true
-      );
-      setAdaptiveState(newAdaptiveState);
-
+      console.log(`📊 Attempts incremented to: ${newAttempts}`);
       return newAttempts;
     });
-  }, [adaptiveState, isCorrect]);
+  }, []);
 
-  const triggerAdaptation = useCallback(() => {
-    if (!currentProblem) return;
+  // Update adaptive state after an attempt
+  const updateAdaptiveStateAfterAttempt = useCallback(
+    (isCorrect: boolean) => {
+      console.log(`📊 Updating adaptive state - isCorrect: ${isCorrect}`);
 
-    const shouldAdapt =
-      adaptiveController.shouldTriggerAdaptation(adaptiveState);
-
-    if (shouldAdapt) {
-      const result = adaptiveController.applyAdaptiveFeatures(
+      const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
         adaptiveState,
-        currentProblem
+        isCorrect
       );
 
-      if (result.success) {
-        setCurrentProblem(result.newSettings);
-        setAdaptiveState(result.newState);
-        setAdaptationMessage(result.message);
+      setAdaptiveState(newAdaptiveState);
 
-        // Clear the message after 5 seconds
-        setTimeout(() => setAdaptationMessage(null), 5000);
-      }
-    }
-  }, [currentProblem, adaptiveState]);
+      console.log('📊 New adaptive state:', newAdaptiveState);
 
+      return newAdaptiveState;
+    },
+    [adaptiveState]
+  );
+
+  // Check if adaptation can be triggered
+  const canTriggerAdaptation = useCallback((): boolean => {
+    return adaptiveController.shouldTriggerAdaptation(adaptiveState);
+  }, [adaptiveState]);
+
+  // Get adaptation suggestions
+  const getAdaptationSuggestions = useCallback((): string[] => {
+    if (!currentProblem) return [];
+
+    return adaptiveController.generateAdaptationSuggestions(
+      adaptiveState,
+      currentProblem
+    );
+  }, [adaptiveState, currentProblem]);
+
+  // Enhanced reset context
   const resetContext = useCallback(() => {
+    console.log('🔄 Resetting ParsonsContext...');
+
     setCurrentProblem(null);
     setUserSolution([]);
     setCurrentBlocks([]);
@@ -155,61 +194,162 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     setIsCorrect(null);
     setIsLoading(false);
     setAttempts(0);
-    setAdaptiveState(adaptiveController.createInitialState());
+    setAdaptiveState(defaultAdaptiveState());
     setAdaptationMessage(null);
+
+    console.log('✅ ParsonsContext reset complete');
   }, []);
 
-  const handleFeedback = (feedback: any) => {
-    console.log('Feedback received:', feedback);
-    if (feedback.success !== undefined) {
-      setIsCorrect(feedback.success);
+  // Handle feedback from ParsonsWidget
+  const handleFeedback = useCallback(
+    (feedback: any) => {
+      console.log('📨 Feedback received in context:', feedback);
 
-      // Store the feedback HTML in the context
-      if (feedback.html) {
-        setFeedback(feedback.html);
-      }
+      if (feedback.success !== undefined) {
+        setIsCorrect(feedback.success);
 
-      // Add additional feedback info to context if needed
-      if (!feedback.success && feedback.errors) {
-        console.log('Errors:', feedback.errors);
+        // Store the feedback HTML in the context
+        if (feedback.html) {
+          setFeedback(feedback.html);
+        } else if (feedback.message) {
+          setFeedback(feedback.message);
+        }
+
+        // Handle additional feedback info
+        if (!feedback.success && feedback.errors) {
+          console.log('📋 Feedback errors:', feedback.errors);
+        }
+
+        // Update adaptive state after getting feedback
+        updateAdaptiveStateAfterAttempt(feedback.success);
       }
-    }
+    },
+    [updateAdaptiveStateAfterAttempt]
+  );
+
+  // Enhanced setCurrentProblem with logging
+  const setCurrentProblemEnhanced = useCallback((problem: ParsonsSettings) => {
+    console.log('📝 Setting current problem:', {
+      hasInitial: !!problem.initial,
+      canIndent: problem.options.can_indent,
+      maxWrongLines: problem.options.max_wrong_lines,
+      linesCount: problem.initial.split('\n').filter((line) => line.trim())
+        .length,
+    });
+
+    setCurrentProblem(problem);
+
+    // Clear solution when problem changes
+    setUserSolution([]);
+    setCurrentBlocks([]);
+    setIsCorrect(null);
+    setFeedback(null);
+    setSocraticFeedback(null);
+  }, []);
+
+  // Enhanced setUserSolution with logging
+  const setUserSolutionEnhanced = useCallback(
+    (solution: string[]) => {
+      console.log('📝 Setting user solution:', {
+        linesCount: solution.length,
+        hasContent: solution.some((line) => line.trim()),
+      });
+
+      setUserSolution(solution);
+
+      // Clear correctness when solution changes
+      if (isCorrect !== null) {
+        setIsCorrect(null);
+        setFeedback(null);
+        setSocraticFeedback(null);
+      }
+    },
+    [isCorrect]
+  );
+
+  const contextValue: ParsonsContextType = {
+    // Core problem state
+    currentProblem,
+    setCurrentProblem: setCurrentProblemEnhanced,
+    userSolution,
+    setUserSolution: setUserSolutionEnhanced,
+    currentBlocks,
+    setCurrentBlocks,
+
+    // Feedback and correctness
+    feedback,
+    setFeedback,
+    socraticFeedback,
+    setSocraticFeedback,
+    isCorrect,
+    setIsCorrect,
+    isLoading,
+    setIsLoading,
+
+    // Attempt tracking
+    attempts,
+    incrementAttempts,
+
+    // Adaptive features
+    adaptiveState,
+    setAdaptiveState,
+    adaptationMessage,
+    setAdaptationMessage,
+
+    // Utility functions
+    handleFeedback,
+    resetContext,
+    updateAdaptiveStateAfterAttempt,
+    canTriggerAdaptation,
+    getAdaptationSuggestions,
   };
 
   return (
-    <ParsonsContext.Provider
-      value={{
-        currentProblem,
-        setCurrentProblem,
-        userSolution,
-        setUserSolution,
-        currentBlocks,
-        setCurrentBlocks,
-        feedback,
-        setFeedback,
-        socraticFeedback,
-        setSocraticFeedback,
-        isCorrect,
-        setIsCorrect,
-        isLoading,
-        setIsLoading,
-        attempts,
-        incrementAttempts,
-        handleFeedback,
-        resetContext,
-
-        // Adaptive features
-        adaptiveState,
-        setAdaptiveState,
-        triggerAdaptation,
-        adaptationMessage,
-        setAdaptationMessage,
-      }}
-    >
+    <ParsonsContext.Provider value={contextValue}>
       {children}
     </ParsonsContext.Provider>
   );
 };
 
-// Export the BlockItem type for use in other components
-export type { BlockItem };
+// Export helpful debugging utilities
+export const useParsonsDebug = () => {
+  const context = useParsonsContext();
+
+  return {
+    logState: () => {
+      console.log('🔍 Current ParsonsContext state:', {
+        hasProblem: !!context.currentProblem,
+        solutionLines: context.userSolution.length,
+        currentBlocks: context.currentBlocks.length,
+        isCorrect: context.isCorrect,
+        attempts: context.attempts,
+        adaptiveState: context.adaptiveState,
+        adaptationMessage: context.adaptationMessage,
+      });
+    },
+
+    getProblemStats: () => {
+      if (!context.currentProblem) return null;
+
+      const lines = context.currentProblem.initial
+        .split('\n')
+        .filter((line) => line.trim());
+      const distractors = lines.filter((line) => line.includes('#distractor'));
+      const solution = lines.filter((line) => !line.includes('#distractor'));
+
+      return {
+        totalLines: lines.length,
+        solutionLines: solution.length,
+        distractorLines: distractors.length,
+        canIndent: context.currentProblem.options.can_indent,
+        maxWrongLines: context.currentProblem.options.max_wrong_lines,
+      };
+    },
+
+    getAdaptiveStats: () => ({
+      ...context.adaptiveState,
+      canTriggerAdaptation: context.canTriggerAdaptation(),
+      suggestions: context.getAdaptationSuggestions(),
+    }),
+  };
+};

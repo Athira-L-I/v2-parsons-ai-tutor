@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { NextPage } from 'next';
-import { useParsonsWidget, BlockItem } from '@/hooks/useParsonsWidget';
+import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
 import { ParsonsSettings, ParsonsGrader } from '@/@types/types';
 import { adaptiveController } from '@/lib/adaptiveController';
 
@@ -68,7 +68,7 @@ const TestParsonsWidgetHook: NextPage = () => {
     moveBlock,
     incrementAttempts,
     triggerAdaptation,
-  } = useParsonsWidget();
+  } = useParsonsContext();
 
   const handleUpdateSettings = () => {
     updateSettings(sampleSettings);
@@ -164,7 +164,7 @@ const TestParsonsWidgetHook: NextPage = () => {
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">
-        Test useParsonsWidget Hook - Adaptive Features Integration
+        Test useParsonsContext Hook - Adaptive Features Integration
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

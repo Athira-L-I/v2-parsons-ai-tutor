@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { NextPage } from 'next';
-import {
-  useParsonsWidgetContext,
-  ParsonsWidgetProvider,
-} from '@/contexts/ParsonsWidgetContext';
+import { useParsonsContext } from '@/contexts/ParsonsContext';
 import { ParsonsSettings, ParsonsGrader } from '@/@types/types';
 
 const sampleSettingsWithPairedDistractors: ParsonsSettings = {
@@ -39,7 +36,7 @@ const TestContent: React.FC = () => {
     updateSettings,
     moveBlock,
     cleanup,
-  } = useParsonsWidgetContext();
+  } = useParsonsContext();
 
   const [selectedBlockId, setSelectedBlockId] = useState<string>('');
 
@@ -327,11 +324,7 @@ const TestContent: React.FC = () => {
 };
 
 const TestPairedDistractorLogic: NextPage = () => {
-  return (
-    <ParsonsWidgetProvider>
-      <TestContent />
-    </ParsonsWidgetProvider>
-  );
+  return <TestContent />;
 };
 
 export default TestPairedDistractorLogic;

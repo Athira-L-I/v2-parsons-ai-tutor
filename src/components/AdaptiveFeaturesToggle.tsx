@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParsonsWidgetContext } from '@/contexts/ParsonsWidgetContext'; // Changed import
+import { useParsonsContext } from '@/contexts/ParsonsContext';
 import { isIndentationProvided } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
@@ -11,12 +11,12 @@ const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
   className = '',
 }) => {
   const {
-    adaptiveFeaturesEnabled,
+    currentProblem: settings,
     adaptiveState,
-    settings,
-    toggleAdaptiveFeatures,
-    triggerAdaptation,
-  } = useParsonsWidgetContext(); // Changed hook call
+    adaptationMessage,
+    canTriggerAdaptation,
+    getAdaptationSuggestions,
+  } = useParsonsContext();
 
   const isIndentProvided = settings ? isIndentationProvided(settings) : false;
   const hasActiveFeatures =
@@ -24,11 +24,26 @@ const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
     adaptiveState.removedDistractors > 0 ||
     isIndentProvided;
 
-  // Fix: Use the same logic as the adaptiveController
-  const canTriggerAdaptation =
-    adaptiveFeaturesEnabled &&
-    settings &&
-    adaptiveController.shouldTriggerAdaptation(adaptiveState);
+  // Use the canTriggerAdaptation from context
+  const canTriggerAdaptationNow = canTriggerAdaptation();
+
+  const handleApplyAdaptation = () => {
+    if (!settings) return;
+
+    try {
+      const result = adaptiveController.applyAdaptiveFeatures(
+        adaptiveState,
+        settings
+      );
+
+      if (result.success) {
+        console.log('Adaptive features applied:', result);
+        // The context will handle the state updates
+      }
+    } catch (error) {
+      console.error('Error applying adaptive features:', error);
+    }
+  };
 
   return (
     <div className={`bg-white p-4 rounded-lg border ${className}`}>
@@ -40,25 +55,6 @@ const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
           <p className="text-sm text-gray-600">
             Automatically adjust problem difficulty based on performance
           </p>
-        </div>
-
-        {/* Toggle Switch */}
-        <div className="flex items-center">
-          <span className="mr-3 text-sm font-medium text-gray-700">
-            {adaptiveFeaturesEnabled ? 'Enabled' : 'Disabled'}
-          </span>
-          <button
-            onClick={toggleAdaptiveFeatures}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              adaptiveFeaturesEnabled ? 'bg-blue-600' : 'bg-gray-300'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                adaptiveFeaturesEnabled ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
         </div>
       </div>
 
@@ -142,41 +138,35 @@ const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
       </div>
 
       {/* Manual Trigger Button */}
-      {adaptiveFeaturesEnabled && (
-        <div className="border-t pt-3">
-          <button
-            onClick={triggerAdaptation}
-            disabled={!canTriggerAdaptation}
-            className={`w-full px-4 py-2 rounded text-sm font-medium transition-colors ${
-              canTriggerAdaptation
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            {canTriggerAdaptation
-              ? 'Apply Adaptive Help'
-              : `Need ${Math.max(
-                  0,
-                  2 - adaptiveState.incorrectAttempts
-                )} more incorrect attempts`}
-          </button>
+      <div className="border-t pt-3">
+        <button
+          onClick={handleApplyAdaptation}
+          disabled={!canTriggerAdaptationNow}
+          className={`w-full px-4 py-2 rounded text-sm font-medium transition-colors ${
+            canTriggerAdaptationNow
+              ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+          }`}
+        >
+          {canTriggerAdaptationNow
+            ? 'Apply Adaptive Help'
+            : `Need ${Math.max(
+                0,
+                2 - adaptiveState.incorrectAttempts
+              )} more incorrect attempts`}
+        </button>
 
-          {canTriggerAdaptation && (
-            <p className="text-xs text-gray-500 mt-1 text-center">
-              Click to get adaptive help based on your attempts
-            </p>
-          )}
-        </div>
-      )}
+        {canTriggerAdaptationNow && (
+          <p className="text-xs text-gray-500 mt-1 text-center">
+            Click to get adaptive help based on your attempts
+          </p>
+        )}
+      </div>
 
-      {/* Disabled State Message */}
-      {!adaptiveFeaturesEnabled && (
-        <div className="border-t pt-3">
-          <div className="bg-gray-50 p-3 rounded">
-            <p className="text-sm text-gray-600 text-center">
-              Enable adaptive features to get help when you're struggling
-            </p>
-          </div>
+      {/* Adaptation Message */}
+      {adaptationMessage && (
+        <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-800">
+          {adaptationMessage}
         </div>
       )}
     </div>
