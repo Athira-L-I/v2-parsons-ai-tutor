@@ -103,5 +103,141 @@
     },
     "createdAt": "2025-04-26T15:51:58.287612",
     "updatedAt": "2025-04-26T15:51:58.287612"
+  },
+
+    {
+      "id": "adaptive-test-simple-distractors",
+      "title": "Sum Positive Numbers - simple distractors",
+      "description": "Write a function to sum only the positive numbers in a list.",
+      "difficulty": "easy",
+      "tags": [
+        "python",
+        "list",
+        "conditional"
+      ],
+      "parsonsSettings": {
+        "initial": "def sum_positives(numbers):\n    total = 0\n    for num in numbers:\n        if num > 0:\n            total += num\n        # else: #distractor\n        #    print(\"Negative or zero\") #distractor\n    # total = total * 1 #distractor\n    return total",
+        "options": {
+          "sortableId": "sortable",
+          "trashId": "sortableTrash",
+          "max_wrong_lines": 5,
+          "grader": "ParsonsWidget._graders.LineBasedGrader",
+          "can_indent": true,
+          "x_indent": 50,
+          "exec_limit": 2500,
+          "feedback_cb": true,
+          "show_feedback": true
+        }
+      },
+      "createdAt": "2025-05-27T10:00:00.000000",
+      "updatedAt": "2025-05-27T10:00:00.000000"
+  },
+    {
+      "id": "adaptive-test-paired-distractors",
+      "title": "Greet User or Admin - paired distractors",
+      "description": "Write a function that greets a user, with a special greeting for admins.",
+      "difficulty": "easy",
+      "tags": [
+        "python",
+        "conditional",
+        "string"
+      ],
+      "parsonsSettings": {
+        "initial": "def greet(name, is_admin):\n    if is_admin:\n        message = \"Welcome, Admin!\" #paired\n    else:\n        message = \"Hello, \" + name #paired\n    # if not is_admin: #distractor #paired\n    #    message = \"Access Denied\" #distractor #paired\n    return message",
+        "options": {
+          "sortableId": "sortable",
+          "trashId": "sortableTrash",
+          "max_wrong_lines": 3,
+          "grader": "ParsonsWidget._graders.LineBasedGrader",
+          "can_indent": true,
+          "x_indent": 50,
+          "exec_limit": 2500,
+          "feedback_cb": true,
+          "show_feedback": true
+        }
+      },
+      "createdAt": "2025-05-27T10:05:00.000000",
+      "updatedAt": "2025-05-27T10:05:00.000000"
+  },
+    {
+      "id": "adaptive-test-combine-blocks",
+      "title": "Initialize and Print Variables- combine blocks",
+      "description": "Initialize several variables and then print them.",
+      "difficulty": "very easy",
+      "tags": [
+        "python",
+        "variables"
+      ],
+      "parsonsSettings": {
+        "initial": "a = 10\nb = 20\nc = a + b\nprint(a)\nprint(b)\nprint(c)\n# d = 0 #distractor",
+        "options": {
+          "sortableId": "sortable",
+          "trashId": "sortableTrash",
+          "max_wrong_lines": 2,
+          "grader": "ParsonsWidget._graders.LineBasedGrader",
+          "can_indent": true,
+          "x_indent": 50,
+          "exec_limit": 2500,
+          "feedback_cb": true,
+          "show_feedback": true
+        }
+      },
+      "createdAt": "2025-05-27T10:10:00.000000",
+      "updatedAt": "2025-05-27T10:10:00.000000"
+  },
+    {
+      "id": "adaptive-test-indentation",
+      "title": "Nested Loop Example- complex indentation",
+      "description": "Print coordinates using nested loops.",
+      "difficulty": "medium",
+      "tags": [
+        "python",
+        "loop",
+        "nested"
+      ],
+      "parsonsSettings": {
+        "initial": "def print_coordinates(rows, cols):\n    for i in range(rows):\n        for j in range(cols):\n            print(f\"({i}, {j})\")\n        # print(\"End of row\") #distractor\n    # print(\"All done\") #distractor",
+        "options": {
+          "sortableId": "sortable",
+          "trashId": "sortableTrash",
+          "max_wrong_lines": 4,
+          "grader": "ParsonsWidget._graders.LineBasedGrader",
+          "can_indent": true,
+          "x_indent": 50,
+          "exec_limit": 2500,
+          "feedback_cb": true,
+          "show_feedback": true
+        }
+      },
+      "createdAt": "2025-05-27T10:15:00.000000",
+      "updatedAt": "2025-05-27T10:15:00.000000"
+  },
+    {
+      "id": "adaptive-test-multiple-features",
+      "title": "Process List Data - multiple features",
+      "description": "Iterate through a list, perform a calculation, and print results conditionally.",
+      "difficulty": "medium",
+      "tags": [
+        "python",
+        "list",
+        "loop",
+        "conditional"
+      ],
+      "parsonsSettings": {
+        "initial": "def process_data(data_list):\n    processed_results = []\n    # temp_var = 0 #distractor\n    for item in data_list:\n        # result = item * 2 #paired\n        # if result > 10: #paired\n        #     processed_results.append(result) #paired\n        # else: #distractor #paired\n        #     print(f\"{result} is too small\") #distractor #paired\n        doubled_item = item * 2\n        if doubled_item > 10:\n            processed_results.append(doubled_item)\n    # print(\"Loop finished\") #distractor\n    return processed_results",
+        "options": {
+          "sortableId": "sortable",
+          "trashId": "sortableTrash",
+          "max_wrong_lines": 6,
+          "grader": "ParsonsWidget._graders.LineBasedGrader",
+          "can_indent": true,
+          "x_indent": 50,
+          "exec_limit": 2500,
+          "feedback_cb": true,
+          "show_feedback": true
+        }
+      },
+      "createdAt": "2025-05-27T10:20:00.000000",
+      "updatedAt": "2025-05-27T10:20:00.000000"
   }
 ]

@@ -8,6 +8,7 @@ import {
   BlockCombineResult,
   PairedDistractorResult,
   IndentationResult,
+  DistractorRemovalResult,
 } from './adaptiveFeatures';
 
 export interface AdaptiveAction {
@@ -90,15 +91,20 @@ export class AdaptiveController {
           // Update state based on action type
           switch (action.type) {
             case 'combine':
-              newState.combinedBlocks += (result as any).combinedBlocks || 1;
+              newState.combinedBlocks +=
+                (result as BlockCombineResult).combinedBlocks || 0;
               break;
             case 'remove_distractors':
               newState.removedDistractors +=
-                (result as any).combinedBlocks || 1;
+                (result as DistractorRemovalResult).removedDistractors || 0; // Use DistractorRemovalResult and its property
               break;
             case 'provide_indentation':
-              // REMOVE this case entirely - we now check settings.options.can_indent instead
+              // No state change in AdaptiveState for this, it modifies ParsonsSettings
               break;
+            // It's good practice to handle 'identify_pairs' if it modifies adaptive state, though it currently doesn't seem to.
+            // case 'identify_pairs':
+            //   // Potentially update state if identify_pairs had an effect on AdaptiveState, e.g., newState.pairsIdentified = true;
+            //   break;
           }
         }
       }
@@ -122,13 +128,18 @@ export class AdaptiveController {
   private applyAction(
     action: AdaptiveAction,
     settings: ParsonsSettings
-  ): BlockCombineResult | PairedDistractorResult | IndentationResult {
+  ):
+    | BlockCombineResult
+    | PairedDistractorResult
+    | IndentationResult
+    | DistractorRemovalResult {
+    // Added DistractorRemovalResult to return type
     switch (action.type) {
       case 'combine':
         return combineBlocks(settings, 1);
 
       case 'remove_distractors':
-        return removeDistractors(settings, 2);
+        return removeDistractors(settings, 2); // This returns DistractorRemovalResult
 
       case 'provide_indentation':
         return provideIndentation(settings);
@@ -137,11 +148,14 @@ export class AdaptiveController {
         return identifyPairedDistractors(settings);
 
       default:
-        return {
-          success: false,
-          newSettings: settings,
-          message: `Unknown action type: ${action.type}`,
-        } as any;
+        // It's better to throw an error for an unhandled action type
+        // or return a more specific error structure if preferred.
+        throw new Error(`Unknown action type: ${action.type}`);
+      // return {
+      //   success: false,
+      //   newSettings: settings,
+      //   message: `Unknown action type: ${(action as any).type}`,
+      // } as any; // Avoid using 'as any' if possible
     }
   }
 
@@ -149,9 +163,10 @@ export class AdaptiveController {
    * Determines if the problem has unpaired distractors
    */
   private hasUnpairedDistractors(settings: ParsonsSettings): boolean {
-    return (
-      settings.initial.includes('#distractor') &&
-      !settings.initial.includes('#paired')
+    const lines = settings.initial.split('\\n');
+    // Check if any line has #distractor but not #paired
+    return lines.some(
+      (line) => line.includes('#distractor') && !line.includes('#paired')
     );
   }
 
@@ -270,7 +285,7 @@ export function autoApplyAdaptiveFeatures(
     incorrectAttempts,
     combinedBlocks: 0,
     removedDistractors: 0,
-    indentationProvided: false,
+    // indentationProvided: false, // This field is not in the AdaptiveState interface
   };
 
   return adaptiveController.applyAdaptiveFeatures(state, settings);
