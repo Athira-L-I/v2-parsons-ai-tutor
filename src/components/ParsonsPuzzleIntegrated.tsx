@@ -1,95 +1,71 @@
-import React, { useEffect, useState } from 'react';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
-import { loadParsonsWidget, isParsonsWidgetLoaded } from '@/lib/parsonsLoader';
-import ParsonsWidgetComponent from './ParsonsWidget';
-import FeedbackPanel from './FeedbackPanel';
+/**
+ * ParsonsPuzzleIntegrated - React-based UI
+ * src/components/ParsonsPuzzleIntegrated.tsx
+ */
 
-// Update the component's props interface
+import React from 'react';
+import { useParsonsContext } from '@/contexts/ParsonsContext';
+import ParsonsBoard from './ParsonsBoard';
+import FeedbackPanel from './FeedbackPanel';
+import SolutionChecker from './SolutionChecker';
+
 interface ParsonsPuzzleIntegratedProps {
   problemId?: string;
-  title?: string;
-  description?: string;
+  title?: string; // Keep for potential use, but not used in this simplified version
+  description?: string; // Keep for potential use, but not used in this simplified version
   onCheckSolution?: (isCorrect: boolean) => void;
 }
 
 const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
   problemId,
-  title = 'Parsons Problem',
-  description = 'Rearrange the code blocks to form a correct solution.',
+  // title = 'Parsons Problem', // Removed default
+  // description = 'Rearrange the code blocks to form a correct solution.', // Removed default
   onCheckSolution,
 }) => {
-  const { currentProblem, isCorrect, setUserSolution, setCurrentBlocks } =
-    useParsonsContext();
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const {
+    currentProblem,
+  } = useParsonsContext(); // Removed setUserSolution, setCurrentBlocks, isCorrect
 
-  // Load the Parsons widget dependencies
-  useEffect(() => {
-    if (!isParsonsWidgetLoaded()) {
-      setIsLoading(true);
-
-      loadParsonsWidget()
-        .then((success) => {
-          if (!success) {
-            setLoadError('Failed to load Parsons widget dependencies');
-          }
-          setIsLoading(false);
-        })
-        .catch((error) => {
-          console.error('Error loading Parsons widget:', error);
-          setLoadError('Error loading Parsons widget: ' + error.message);
-          setIsLoading(false);
-        });
-    } else {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Add this to call onCheckSolution when solution is checked
-  const handleSolutionChange = (solution: string[], blocks?: BlockItem[]) => {
-    setUserSolution(solution);
-    if (setCurrentBlocks && blocks) {
-      setCurrentBlocks(blocks);
-    }
-    // No need to call onCheckSolution here, it will be called after checking the solution
-  };
-
-  if (isLoading) {
+  // If there's no problem loaded, don't show anything
+  if (!currentProblem) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="text-center py-8 text-gray-500">
+        <p>No problem loaded. Please select a problem to get started.</p>
       </div>
     );
   }
 
-  if (loadError) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        <p>
-          <strong>Error:</strong> {loadError}
-        </p>
-        <p>
-          Please try refreshing the page or contact support if the problem
-          persists.
-        </p>
-      </div>
-    );
-  }
-
-  // Pass onCheckSolution to ParsonsWidget
   return (
     <div className="parsons-puzzle-integrated">
-      {currentProblem && (
-        <ParsonsWidgetComponent
+      {/* Render React-based interface */}
+      <>
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+          <p className="text-sm text-blue-700">
+            <strong>React-based Parsons Puzzle</strong>
+          </p>
+        </div>
+        <ParsonsBoard />
+        <SolutionChecker
           problemId={problemId}
-          onSolutionChange={handleSolutionChange}
-          onCheckSolution={onCheckSolution}
+          onCheckComplete={onCheckSolution} // Propagates to SolutionChecker
         />
-      )}
+      </>
 
-      {!currentProblem && (
-        <div className="text-center py-8 text-gray-500">
-          <p>No problem loaded. Please select a problem to get started.</p>
+      {/* Show feedback */}
+      <div className="mt-6">
+        <FeedbackPanel />
+      </div>
+
+      {/* Debug info in development - simplified */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
+          <p>
+            <strong>Problem ID:</strong> {problemId || 'N/A'}
+          </p>
+          <p>
+            <strong>Current Problem Loaded:</strong>{' '}
+            {currentProblem ? 'Yes' : 'No'}
+          </p>
         </div>
       )}
     </div>

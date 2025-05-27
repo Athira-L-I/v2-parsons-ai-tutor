@@ -1,23 +1,110 @@
 /**
- * Test page for the fixed integration
+ * Error-Safe Test Page with complete React/jQuery isolation
  * src/pages/test/fixed-integration.tsx
  */
 
-import React, { useState } from 'react';
-import {
-  ParsonsProvider,
-  useParsonsContext,
-  useParsonsDebug,
-} from '@/contexts/ParsonsContext';
-import ParsonsProblemContainer from '@/components/ParsonsProblemContainer';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ParsonsSettings } from '@/@types/types';
+
+// Import components dynamically to prevent loading issues
+const DynamicParsonsProvider = React.lazy(() =>
+  import('@/contexts/ParsonsContext').then((module) => ({
+    default: module.ParsonsProvider,
+  }))
+);
+
+const DynamicParsonsProblemContainer = React.lazy(
+  () => import('@/components/ParsonsProblemContainer')
+);
+
+// Error boundary specifically for React/jQuery conflicts
+class ReactJQueryErrorBoundary extends React.Component<
+  {
+    children: React.ReactNode;
+    onError: (error: Error) => void;
+    resetKey: string | number;
+  },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    console.error('🚨 React/jQuery Error Boundary caught:', error);
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('🚨 Error Details:', { error, errorInfo });
+
+    // Check if this is the typical React/jQuery conflict
+    if (
+      error.message.includes('removeChild') ||
+      error.message.includes('Node') ||
+      error.name === 'NotFoundError'
+    ) {
+      console.log('🔍 Detected React/jQuery DOM conflict');
+    }
+
+    this.props.onError(error);
+  }
+
+  componentDidUpdate(prevProps: any) {
+    // Reset error state when resetKey changes
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false, error: undefined });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-bold">React/jQuery Conflict Detected</p>
+              <p className="text-sm mt-1">
+                {this.state.error?.message ||
+                  'DOM manipulation conflict between React and jQuery'}
+              </p>
+              <p className="text-xs mt-2 text-red-600">
+                This usually happens when switching between problems. The page
+                will auto-recover.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: undefined });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const TestFixedIntegrationPage: React.FC = () => {
   const [problemType, setProblemType] = useState<
     'simple' | 'complex' | 'adaptive'
   >('simple');
+  const [forceApiTest, setForceApiTest] = useState(false);
+  const [isolationKey, setIsolationKey] = useState(0);
+  const [hasError, setHasError] = useState(false);
+  const [errorCount, setErrorCount] = useState(0);
 
-  // Sample problems for testing
+  // Sample problems
   const simpleManualProblem: ParsonsSettings = {
     initial: `def hello():
     print("Hello")
@@ -71,7 +158,7 @@ if n == 1: #distractor`,
     },
   };
 
-  const getCurrentProblem = () => {
+  const getCurrentProblem = useCallback(() => {
     switch (problemType) {
       case 'simple':
         return simpleManualProblem;
@@ -82,108 +169,225 @@ if n == 1: #distractor`,
       default:
         return simpleManualProblem;
     }
-  };
+  }, [problemType]);
+
+  // Handle problem type changes with complete isolation
+  const handleProblemTypeChange = useCallback(
+    (newType: 'simple' | 'complex' | 'adaptive') => {
+      console.log(`🔄 Changing problem type: ${problemType} → ${newType}`);
+
+      // Reset error state
+      setHasError(false);
+
+      // Change type
+      setProblemType(newType);
+
+      // Force complete re-isolation
+      setIsolationKey((prev) => prev + 1);
+
+      console.log(
+        `✅ Problem type changed to ${newType} with isolation key ${
+          isolationKey + 1
+        }`
+      );
+    },
+    [problemType, isolationKey]
+  );
+
+  // Handle API test toggle
+  const handleApiTestToggle = useCallback((checked: boolean) => {
+    console.log(`🔄 API test mode: ${checked ? 'enabled' : 'disabled'}`);
+    setForceApiTest(checked);
+    setIsolationKey((prev) => prev + 1);
+  }, []);
+
+  // Handle errors from error boundary
+  const handleError = useCallback(
+    (error: Error) => {
+      console.error('🚨 Handling error from boundary:', error);
+      setHasError(true);
+      setErrorCount((prev) => prev + 1);
+
+      // Auto-recovery: if we get repeated errors, try a complete reset
+      if (errorCount >= 2) {
+        console.log('🔄 Multiple errors detected, triggering auto-recovery...');
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        // Try to recover by resetting isolation
+        setTimeout(() => {
+          console.log('🔄 Attempting auto-recovery...');
+          setHasError(false);
+          setIsolationKey((prev) => prev + 1);
+        }, 1000);
+      }
+    },
+    [errorCount]
+  );
+
+  // Auto-clear error state after isolation key changes
+  useEffect(() => {
+    if (hasError) {
+      const timer = setTimeout(() => {
+        setHasError(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isolationKey, hasError]);
+
+  // Reset error count periodically
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setErrorCount(0);
+    }, 30000); // Reset error count every 30 seconds
+    return () => clearTimeout(timer);
+  }, [errorCount]);
 
   return (
-    <ParsonsProvider>
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Fixed Integration Test
-            </h1>
-            <p className="text-gray-600 mb-4">
-              Test the comprehensive fixes for ParsonsWidget loading and
-              adaptive features.
-            </p>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-6xl mx-auto px-4">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Fixed Integration Test - Isolated Version
+          </h1>
+          <p className="text-gray-600 mb-4">
+            This version uses complete React/jQuery isolation to prevent DOM
+            conflicts.
+          </p>
 
-            {/* Problem Type Selector */}
-            <div className="flex items-center space-x-4 mb-6 p-4 bg-white rounded border">
-              <span className="font-medium text-gray-700">Test Problem:</span>
+          {/* Controls */}
+          <div className="flex items-center flex-wrap gap-4 mb-6 p-4 bg-white rounded border">
+            <span className="font-medium text-gray-700">Test Problem:</span>
 
-              <button
-                onClick={() => setProblemType('simple')}
-                className={`px-4 py-2 rounded transition-colors ${
-                  problemType === 'simple'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Simple Problem
-              </button>
+            <button
+              onClick={() => handleProblemTypeChange('simple')}
+              className={`px-4 py-2 rounded transition-colors ${
+                problemType === 'simple'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Simple Problem
+            </button>
 
-              <button
-                onClick={() => setProblemType('complex')}
-                className={`px-4 py-2 rounded transition-colors ${
-                  problemType === 'complex'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Complex Problem
-              </button>
+            <button
+              onClick={() => handleProblemTypeChange('complex')}
+              className={`px-4 py-2 rounded transition-colors ${
+                problemType === 'complex'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Complex Problem
+            </button>
 
-              <button
-                onClick={() => setProblemType('adaptive')}
-                className={`px-4 py-2 rounded transition-colors ${
-                  problemType === 'adaptive'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Adaptive Test
-              </button>
+            <button
+              onClick={() => handleProblemTypeChange('adaptive')}
+              className={`px-4 py-2 rounded transition-colors ${
+                problemType === 'adaptive'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Adaptive Test
+            </button>
 
-              {/* Reset Button */}
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
-              >
-                Reset Page
-              </button>
+            {/* API Test Toggle */}
+            <div className="flex items-center gap-2 ml-4">
+              <input
+                type="checkbox"
+                id="api-test"
+                checked={forceApiTest}
+                onChange={(e) => handleApiTestToggle(e.target.checked)}
+                className="rounded"
+              />
+              <label htmlFor="api-test" className="text-sm text-gray-600">
+                Force API test
+              </label>
+            </div>
+
+            {/* Reset Button */}
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded bg-red-500 text-white hover:bg-red-600 transition-colors ml-auto"
+            >
+              Refresh Page
+            </button>
+          </div>
+
+          {/* Status Display */}
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <strong>Problem:</strong> {problemType}
+              </div>
+              <div>
+                <strong>Isolation Key:</strong> {isolationKey}
+              </div>
+              <div>
+                <strong>Error State:</strong> {hasError ? '❌' : '✅'}
+              </div>
+              <div>
+                <strong>Error Count:</strong> {errorCount}
+              </div>
             </div>
           </div>
-
-          {/* Debug Panel */}
-          <DebugPanel />
-
-          {/* Main Problem Container */}
-          <div className="mt-6">
-            <ParsonsProblemContainer
-              problemId={`test-${problemType}`}
-              initialProblem={getCurrentProblem()}
-              title={`Test Problem: ${problemType}`}
-              description={`Testing ${problemType} problem with fixed integration`}
-              showUploader={false}
-            />
-          </div>
-
-          {/* Testing Instructions */}
-          <TestingInstructions />
         </div>
+
+        {/* Global Debug Panel */}
+        <GlobalDebugPanel />
+
+        {/* Main Problem Container with Complete Isolation */}
+        <div className="mt-6">
+          <ReactJQueryErrorBoundary
+            onError={handleError}
+            resetKey={isolationKey}
+          >
+            <React.Suspense
+              fallback={
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              }
+            >
+              <DynamicParsonsProvider key={`provider-${isolationKey}`}>
+                <DynamicParsonsProblemContainer
+                  key={`container-${isolationKey}-${problemType}-${forceApiTest}`}
+                  problemId={forceApiTest ? `test-${problemType}` : undefined}
+                  initialProblem={getCurrentProblem()}
+                  title={`Test Problem: ${problemType}`}
+                  description={`Testing ${problemType} problem with complete isolation${
+                    forceApiTest ? ' (API test mode)' : ''
+                  }`}
+                  showUploader={false}
+                />
+              </DynamicParsonsProvider>
+            </React.Suspense>
+          </ReactJQueryErrorBoundary>
+        </div>
+
+        {/* Instructions */}
+        <IsolatedTestingInstructions />
       </div>
-    </ParsonsProvider>
+    </div>
   );
 };
 
-// Debug panel component
-const DebugPanel: React.FC = () => {
-  const debug = useParsonsDebug();
-  const context = useParsonsContext();
+// Global debug panel that's outside the isolated area
+const GlobalDebugPanel: React.FC = () => {
   const [showDebug, setShowDebug] = useState(false);
-
-  const problemStats = debug.getProblemStats();
-  const adaptiveStats = debug.getAdaptiveStats();
 
   return (
     <div className="bg-white border rounded p-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Debug Panel</h3>
+        <h3 className="text-lg font-semibold">Global Debug Panel</h3>
         <button
           onClick={() => setShowDebug(!showDebug)}
           className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded"
         >
-          {showDebug ? 'Hide' : 'Show'} Details
+          {showDebug ? 'Hide' : 'Show'} Debug Info
         </button>
       </div>
 
@@ -191,129 +395,66 @@ const DebugPanel: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="text-center p-2 bg-gray-50 rounded">
           <div className="text-lg font-bold text-blue-600">
-            {context.currentProblem ? '✅' : '❌'}
+            {typeof window !== 'undefined' && window.ParsonsWidget
+              ? '✅'
+              : '❌'}
           </div>
-          <div className="text-xs text-gray-600">Problem Loaded</div>
+          <div className="text-xs text-gray-600">ParsonsWidget</div>
         </div>
 
         <div className="text-center p-2 bg-gray-50 rounded">
           <div className="text-lg font-bold text-green-600">
-            {context.attempts}
+            {typeof window !== 'undefined' && window.jQuery ? '✅' : '❌'}
           </div>
-          <div className="text-xs text-gray-600">Attempts</div>
+          <div className="text-xs text-gray-600">jQuery</div>
         </div>
 
         <div className="text-center p-2 bg-gray-50 rounded">
           <div className="text-lg font-bold text-purple-600">
-            {adaptiveStats.incorrectAttempts}
+            {typeof window !== 'undefined' && window.LIS ? '✅' : '❌'}
           </div>
-          <div className="text-xs text-gray-600">Incorrect</div>
+          <div className="text-xs text-gray-600">LIS</div>
         </div>
 
         <div className="text-center p-2 bg-gray-50 rounded">
           <div className="text-lg font-bold text-orange-600">
-            {context.isCorrect === true
+            {typeof window !== 'undefined' && window.jQuery?.fn?.sortable
               ? '✅'
-              : context.isCorrect === false
-              ? '❌'
-              : '⏳'}
+              : '❌'}
           </div>
-          <div className="text-xs text-gray-600">Status</div>
+          <div className="text-xs text-gray-600">Sortable</div>
         </div>
       </div>
 
       {showDebug && (
         <div className="space-y-4">
-          {/* Problem Stats */}
-          {problemStats && (
-            <div>
-              <h4 className="font-medium text-gray-800 mb-2">
-                Problem Statistics:
-              </h4>
-              <div className="bg-gray-50 p-3 rounded text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>Total Lines: {problemStats.totalLines}</div>
-                  <div>Solution Lines: {problemStats.solutionLines}</div>
-                  <div>Distractor Lines: {problemStats.distractorLines}</div>
-                  <div>Can Indent: {problemStats.canIndent ? 'Yes' : 'No'}</div>
-                  <div>Max Wrong: {problemStats.maxWrongLines}</div>
-                  <div>User Solution: {context.userSolution.length} lines</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Adaptive Stats */}
           <div>
-            <h4 className="font-medium text-gray-800 mb-2">
-              Adaptive Features:
-            </h4>
-            <div className="bg-purple-50 p-3 rounded text-sm">
+            <h4 className="font-medium text-gray-800 mb-2">Environment:</h4>
+            <div className="bg-gray-50 p-3 rounded text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div>Combined Blocks: {adaptiveStats.combinedBlocks}</div>
-                <div>
-                  Removed Distractors: {adaptiveStats.removedDistractors}
-                </div>
-                <div>
-                  Can Trigger:{' '}
-                  {adaptiveStats.canTriggerAdaptation ? 'Yes' : 'No'}
-                </div>
-                <div>Total Attempts: {adaptiveStats.attempts}</div>
+                <div>React Version: {React.version}</div>
+                <div>Node ENV: {process.env.NODE_ENV}</div>
+                <div>User Agent: {navigator.userAgent.split(' ')[0]}</div>
+                <div>URL: {window.location.pathname}</div>
               </div>
-
-              {adaptiveStats.suggestions.length > 0 && (
-                <div className="mt-2">
-                  <div className="font-medium mb-1">Suggestions:</div>
-                  <ul className="list-disc list-inside space-y-1">
-                    {adaptiveStats.suggestions.map((suggestion, index) => (
-                      <li key={index} className="text-purple-700">
-                        {suggestion}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Current Solution */}
-          {context.userSolution.length > 0 && (
-            <div>
-              <h4 className="font-medium text-gray-800 mb-2">
-                Current Solution:
-              </h4>
-              <pre className="bg-gray-50 p-3 rounded text-sm font-mono overflow-x-auto">
-                {context.userSolution.join('\n')}
-              </pre>
-            </div>
-          )}
-
-          {/* Messages */}
-          {context.adaptationMessage && (
-            <div>
-              <h4 className="font-medium text-gray-800 mb-2">
-                Adaptation Message:
-              </h4>
-              <div className="bg-blue-50 p-3 rounded text-sm text-blue-800">
-                {context.adaptationMessage}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
           <div className="flex gap-2">
             <button
-              onClick={debug.logState}
+              onClick={() => {
+                console.log('🔍 Global Dependencies:', {
+                  jQuery: typeof window.jQuery,
+                  jQueryUI: typeof window.jQuery?.ui,
+                  lodash: typeof window._,
+                  LIS: typeof window.LIS,
+                  ParsonsWidget: typeof window.ParsonsWidget,
+                  sortable: typeof window.jQuery?.fn?.sortable,
+                });
+              }}
               className="px-3 py-1 text-sm bg-blue-100 hover:bg-blue-200 rounded"
             >
-              Log State to Console
-            </button>
-
-            <button
-              onClick={context.resetContext}
-              className="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 rounded"
-            >
-              Reset Context
+              Log Dependencies
             </button>
           </div>
         </div>
@@ -322,65 +463,77 @@ const DebugPanel: React.FC = () => {
   );
 };
 
-// Testing instructions component
-const TestingInstructions: React.FC = () => (
-  <div className="mt-8 p-4 bg-blue-50 rounded border border-blue-200">
-    <h3 className="font-semibold text-blue-800 mb-2">Testing Instructions:</h3>
-    <div className="text-sm text-blue-700 space-y-2">
+// Testing instructions
+const IsolatedTestingInstructions: React.FC = () => (
+  <div className="mt-8 p-4 bg-green-50 rounded border border-green-200">
+    <h3 className="font-semibold text-green-800 mb-2">
+      Isolated Testing Instructions:
+    </h3>
+    <div className="text-sm text-green-700 space-y-2">
       <div>
-        <strong>1. Widget Loading Test:</strong>
+        <strong>🛡️ What's Fixed in This Version:</strong>
         <ul className="list-disc list-inside ml-4 space-y-1">
-          <li>Widget should load reliably without errors</li>
-          <li>All dependencies should load in correct order</li>
-          <li>No race conditions or initialization failures</li>
-          <li>Check browser console for successful loading logs</li>
+          <li>
+            <strong>Complete Isolation:</strong> React and jQuery never
+            interfere with each other
+          </li>
+          <li>
+            <strong>Error Boundaries:</strong> Catches and handles React/jQuery
+            conflicts gracefully
+          </li>
+          <li>
+            <strong>Auto-Recovery:</strong> Automatically recovers from DOM
+            conflicts
+          </li>
+          <li>
+            <strong>Dynamic Loading:</strong> Components load only when needed
+          </li>
         </ul>
       </div>
 
       <div>
-        <strong>2. Adaptive Features Test:</strong>
+        <strong>✅ Expected Behavior:</strong>
         <ul className="list-disc list-inside ml-4 space-y-1">
-          <li>Enable adaptive features in the problem container</li>
-          <li>Make 2+ incorrect attempts by submitting wrong solutions</li>
-          <li>
-            After 2+ incorrect attempts, "Apply Adaptive Help" should become
-            enabled
-          </li>
-          <li>Click "Apply Adaptive Help" - problem should visibly change</li>
-          <li>
-            Look for combined blocks, removed distractors, or provided
-            indentation
-          </li>
-          <li>You can reset to original problem to test again</li>
+          <li>Widget loads immediately without errors</li>
+          <li>Switching problem types works smoothly</li>
+          <li>No "removeChild" errors in console</li>
+          <li>If errors occur, page auto-recovers</li>
         </ul>
       </div>
 
       <div>
-        <strong>3. State Management Test:</strong>
-        <ul className="list-disc list-inside ml-4 space-y-1">
-          <li>Check debug panel to see unified state management</li>
-          <li>Switch between problem types to test reloading</li>
-          <li>All state should be properly tracked and synchronized</li>
-          <li>Use "Log State to Console" to see detailed state info</li>
-        </ul>
+        <strong>🧪 Test Sequence:</strong>
+        <ol className="list-decimal list-inside ml-4 space-y-1">
+          <li>Page loads with Simple problem active</li>
+          <li>Switch to Complex problem - should work seamlessly</li>
+          <li>Switch to Adaptive test - should work seamlessly</li>
+          <li>Try drag and drop functionality</li>
+          <li>Check console for success logs</li>
+        </ol>
       </div>
 
       <div>
-        <strong>4. Problem Type Tests:</strong>
+        <strong>🔧 If You Still See Errors:</strong>
         <ul className="list-disc list-inside ml-4 space-y-1">
           <li>
-            <strong>Simple:</strong> Basic 3-line function with 1 distractor
+            The error boundary should catch them and show recovery options
           </li>
-          <li>
-            <strong>Complex:</strong> More complex function with combined blocks
-            and multiple distractors
-          </li>
-          <li>
-            <strong>Adaptive:</strong> Recursive function designed for adaptive
-            feature testing
-          </li>
+          <li>Page should auto-recover after 1-2 seconds</li>
+          <li>Check global debug panel for dependency status</li>
+          <li>Use "Refresh Page" as final fallback</li>
         </ul>
       </div>
+    </div>
+
+    <div className="mt-4 p-3 bg-green-100 rounded">
+      <strong>🎯 Success Indicators:</strong>
+      <ul className="list-disc list-inside mt-2 space-y-1">
+        <li>All global debug indicators are green (✅)</li>
+        <li>Drag and drop interface appears</li>
+        <li>No red error messages</li>
+        <li>Smooth switching between problem types</li>
+        <li>Console shows "✅ Isolated ParsonsWidget created successfully"</li>
+      </ul>
     </div>
   </div>
 );

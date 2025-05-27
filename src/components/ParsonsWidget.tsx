@@ -1,5 +1,5 @@
 /**
- * Fixed ParsonsWidget Component with improved initialization
+ * Completely Isolated ParsonsWidget Component - Prevents React/jQuery conflicts
  * src/components/ParsonsWidget.tsx
  */
 
@@ -9,7 +9,6 @@ import { ParsonsSettings } from '@/@types/types';
 import { isParsonsWidgetLoaded, loadParsonsWidget } from '@/lib/parsonsLoader';
 import * as api from '@/lib/api';
 
-// Declare the ParsonsWidget type to match the JS library
 declare global {
   interface Window {
     ParsonsWidget: any;
@@ -24,6 +23,57 @@ interface ParsonsWidgetProps {
   problemId?: string;
   onSolutionChange?: (solution: string[]) => void;
   onCheckSolution?: (isCorrect: boolean) => void;
+}
+
+// Error Boundary to catch React/jQuery conflicts
+class ParsonsErrorBoundary extends React.Component<
+  { children: React.ReactNode; onError?: (error: Error) => void },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error(
+      '🚨 ParsonsWidget Error Boundary caught error:',
+      error,
+      errorInfo
+    );
+    if (this.props.onError) {
+      this.props.onError(error);
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          <p className="font-bold">Widget Error</p>
+          <p className="text-sm">
+            The Parsons widget encountered an error. This usually happens due to
+            React/jQuery conflicts.
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: undefined });
+              window.location.reload();
+            }}
+            className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm"
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
@@ -41,192 +91,302 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
     setIsLoading,
   } = useParsonsContext();
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [parsonsWidget, setParsonsWidget] = useState<any>(null);
-  const [dependenciesLoaded, setDependenciesLoaded] = useState(false);
-  const [initializationError, setInitializationError] = useState<string | null>(
-    null
-  );
+  // Use a container that React will never touch after creation
+  const isolatedContainerRef = useRef<HTMLDivElement>(null);
+  const [widgetInstance, setWidgetInstance] = useState<any>(null);
+  const [loadingState, setLoadingState] = useState<
+    'loading' | 'ready' | 'error' | 'widget-ready'
+  >('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
 
-  // Use refs to track the current problem to detect changes
+  // Refs to track state without causing re-renders
   const currentProblemRef = useRef<ParsonsSettings | null>(null);
   const isInitializingRef = useRef(false);
+  const cleanupInProgressRef = useRef(false);
 
-  const sortableId = 'parsons-sortable';
-  const trashId = 'parsons-trash';
+  const sortableId = `parsons-sortable-${Date.now()}`;
+  const trashId = `parsons-trash-${Date.now()}`;
 
-  // Load dependencies on mount
+  // Handle errors
+  const handleError = useCallback((error: Error) => {
+    console.error('🚨 ParsonsWidget error:', error);
+    setHasError(true);
+    setErrorMessage(error.message);
+    setLoadingState('error');
+  }, []);
+
+  // Load dependencies
   useEffect(() => {
-    console.log('🚀 ParsonsWidget: Loading dependencies...');
+    console.log('🚀 Loading Parsons dependencies...');
 
     if (isParsonsWidgetLoaded()) {
       console.log('✅ Dependencies already loaded');
-      setDependenciesLoaded(true);
+      setLoadingState('ready');
       return;
     }
 
     loadParsonsWidget()
       .then(() => {
         console.log('✅ Dependencies loaded successfully');
-        setDependenciesLoaded(true);
-        setInitializationError(null);
+        setLoadingState('ready');
+        setErrorMessage(null);
       })
       .catch((error) => {
         console.error('❌ Failed to load dependencies:', error);
-        setInitializationError(`Failed to load dependencies: ${error.message}`);
-        setDependenciesLoaded(false);
+        setLoadingState('error');
+        setErrorMessage(`Failed to load dependencies: ${error.message}`);
       });
   }, []);
 
-  // Clean up widget
-  const cleanupWidget = useCallback(() => {
-    console.log('🧹 Cleaning up ParsonsWidget...');
-
-    if (parsonsWidget) {
-      try {
-        // Remove feedback panels
-        document
-          .querySelectorAll('.parsons-feedback')
-          .forEach((el) => el.remove());
-
-        // Clean up jQuery UI sortable instances
-        if (window.jQuery) {
-          try {
-            const sortableElement = window.jQuery(`#ul-${sortableId}`);
-            const trashElement = window.jQuery(`#ul-${trashId}`);
-
-            if (sortableElement.length && sortableElement.sortable) {
-              sortableElement.sortable('destroy');
-            }
-            if (trashElement.length && trashElement.sortable) {
-              trashElement.sortable('destroy');
-            }
-          } catch (e) {
-            console.warn('⚠️ Error cleaning up sortables:', e);
-          }
-        }
-
-        // Clear container
-        if (containerRef.current) {
-          containerRef.current.innerHTML = '';
-        }
-      } catch (error) {
-        console.error('❌ Error during cleanup:', error);
-      }
-    }
-
-    setParsonsWidget(null);
-    isInitializingRef.current = false;
-  }, [parsonsWidget, sortableId, trashId]);
-
-  // Initialize widget
-  const initializeWidget = useCallback(async () => {
-    if (!currentProblem || !dependenciesLoaded || isInitializingRef.current) {
+  // Completely isolated cleanup function
+  const performCleanup = useCallback(() => {
+    if (cleanupInProgressRef.current) {
+      console.log('🧹 Cleanup already in progress, skipping...');
       return;
     }
 
-    console.log('🔧 Initializing ParsonsWidget with problem...');
+    cleanupInProgressRef.current = true;
+    console.log('🧹 Starting isolated cleanup...');
+
+    try {
+      // Stop any observers
+      if (widgetInstance?._solutionObserver) {
+        widgetInstance._solutionObserver.disconnect();
+        widgetInstance._solutionObserver = null;
+      }
+
+      // Clean up jQuery elements WITHOUT letting React interfere
+      if (window.jQuery && isParsonsWidgetLoaded()) {
+        try {
+          // Find and destroy sortable instances
+          const sortableSelector = `#ul-${sortableId}`;
+          const trashSelector = `#ul-${trashId}`;
+
+          const $sortable = window.jQuery(sortableSelector);
+          const $trash = window.jQuery(trashSelector);
+
+          if ($sortable.length && $sortable.data('ui-sortable')) {
+            console.log('🧹 Destroying sortable instance');
+            $sortable.sortable('destroy');
+          }
+
+          if ($trash.length && $trash.data('ui-sortable')) {
+            console.log('🧹 Destroying trash sortable instance');
+            $trash.sortable('destroy');
+          }
+
+          // Remove all jQuery UI classes and data
+          window
+            .jQuery(`#${sortableId}, #${trashId}`)
+            .removeClass('ui-sortable ui-droppable')
+            .removeData();
+        } catch (jqError) {
+          console.warn('⚠️ jQuery cleanup error (expected):', jqError);
+        }
+      }
+
+      // Remove feedback elements
+      document.querySelectorAll('.parsons-feedback').forEach((el) => {
+        try {
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        } catch (removeError) {
+          console.warn('⚠️ Element removal warning (expected):', removeError);
+        }
+      });
+
+      // Clear the isolated container completely
+      if (isolatedContainerRef.current) {
+        // Use a timeout to let jQuery finish any pending operations
+        setTimeout(() => {
+          if (isolatedContainerRef.current) {
+            try {
+              isolatedContainerRef.current.innerHTML = '';
+            } catch (clearError) {
+              console.warn(
+                '⚠️ Container clear warning (expected):',
+                clearError
+              );
+            }
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.warn(
+        '⚠️ Cleanup error (expected in React/jQuery conflicts):',
+        error
+      );
+    } finally {
+      setWidgetInstance(null);
+      isInitializingRef.current = false;
+
+      // Reset cleanup flag after a delay
+      setTimeout(() => {
+        cleanupInProgressRef.current = false;
+      }, 200);
+
+      console.log('✅ Isolated cleanup completed');
+    }
+  }, [widgetInstance, sortableId, trashId]);
+
+  // Initialize widget in completely isolated way
+  const initializeWidget = useCallback(async () => {
+    if (
+      !currentProblem ||
+      loadingState !== 'ready' ||
+      isInitializingRef.current ||
+      hasError
+    ) {
+      return;
+    }
+
+    if (!isParsonsWidgetLoaded()) {
+      setLoadingState('error');
+      setErrorMessage('Dependencies not properly loaded');
+      return;
+    }
+
+    console.log('🔧 Initializing isolated ParsonsWidget...');
     isInitializingRef.current = true;
 
     try {
       // Clean up any existing widget
-      cleanupWidget();
+      performCleanup();
 
-      // Wait a bit for cleanup to complete
+      // Wait for cleanup to complete
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      if (!isolatedContainerRef.current) {
+        throw new Error('Isolated container not available');
+      }
+
+      // Create a completely isolated DOM structure that React won't touch
+      const isolatedHTML = `
+        <div class="parsons-isolated-container" style="position: relative;">
+          <div style="display: flex; gap: 1rem; min-height: 400px;">
+            <div class="parsons-trash-area" style="flex: 1; border: 2px dashed #ccc; padding: 1rem; border-radius: 8px;">
+              <h3 style="margin-top: 0;">Available Blocks</h3>
+              <div id="${trashId}"></div>
+            </div>
+            <div class="parsons-solution-area" style="flex: 1; border: 2px solid #007bff; padding: 1rem; border-radius: 8px;">
+              <h3 style="margin-top: 0;">Your Solution</h3>
+              <div id="${sortableId}"></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Set innerHTML directly (React won't manage this)
+      isolatedContainerRef.current.innerHTML = isolatedHTML;
+
+      // Wait for DOM to be ready
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify dependencies are still available
-      if (!isParsonsWidgetLoaded()) {
-        throw new Error('Dependencies not available during initialization');
+      // Verify elements exist
+      const trashElement = document.getElementById(trashId);
+      const sortableElement = document.getElementById(sortableId);
+
+      if (!trashElement || !sortableElement) {
+        throw new Error('Failed to create isolated DOM elements');
       }
 
-      // Create container HTML
-      if (containerRef.current) {
-        containerRef.current.innerHTML = `
-          <div id="${trashId}" class="trash-container"></div>
-          <div id="${sortableId}" class="sortable-container"></div>
-        `;
-      }
+      console.log('✅ Isolated DOM structure created');
 
-      // Wait for DOM to update
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Initialize the widget
+      // Create widget options
       const options = {
         sortableId: sortableId,
         trashId: trashId,
         max_wrong_lines: currentProblem.options.max_wrong_lines || 10,
         can_indent: currentProblem.options.can_indent !== false,
         x_indent: currentProblem.options.x_indent || 50,
-        feedback_cb: handleFeedback,
-        lang: currentProblem.options.lang || 'en',
+        feedback_cb: (feedback: any) => {
+          console.log('📨 Widget feedback received:', feedback);
+
+          try {
+            if (feedback.success !== undefined) {
+              setIsCorrect(feedback.success);
+
+              if (feedback.html) {
+                setFeedback(feedback.html);
+              } else if (feedback.message) {
+                setFeedback(feedback.message);
+              } else {
+                setFeedback(
+                  feedback.success ? 'Your solution is correct!' : ''
+                );
+              }
+            }
+          } catch (feedbackError) {
+            console.error('❌ Error handling feedback:', feedbackError);
+          }
+        },
+        lang: 'en',
         trash_label: '',
         solution_label: '',
         showFeedback: false,
       };
 
       console.log('📋 Creating ParsonsWidget with options:', options);
+
+      // Create the widget instance
       const widget = new window.ParsonsWidget(options);
 
+      // Initialize with problem code
       widget.init(currentProblem.initial);
       widget.shuffleLines();
 
-      setParsonsWidget(widget);
+      setWidgetInstance(widget);
       currentProblemRef.current = currentProblem;
+      setLoadingState('widget-ready');
+      setErrorMessage(null);
 
-      console.log('✅ ParsonsWidget initialized successfully');
+      console.log('✅ Isolated ParsonsWidget created successfully');
 
-      // Set up solution change monitoring
+      // Set up solution monitoring
       setupSolutionMonitoring(widget);
 
-      // Fix connectWith after initialization
+      // Fix connectWith after delay
       setTimeout(() => {
         fixConnectWith();
-      }, 200);
+      }, 500);
     } catch (error) {
-      console.error('❌ Error initializing ParsonsWidget:', error);
-      setInitializationError(`Initialization failed: ${error.message}`);
+      console.error('❌ Error initializing isolated widget:', error);
+      handleError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       isInitializingRef.current = false;
     }
-  }, [currentProblem, dependenciesLoaded, cleanupWidget, sortableId, trashId]);
+  }, [currentProblem, loadingState, hasError, performCleanup, handleError]);
 
-  // Fix connectWith for sortables
+  // Fix connectWith
   const fixConnectWith = useCallback(() => {
-    if (!window.jQuery) return;
+    if (!window.jQuery || !isParsonsWidgetLoaded()) return;
 
     try {
-      const sortableElement = window.jQuery(`#ul-${sortableId}`);
-      const trashElement = window.jQuery(`#ul-${trashId}`);
+      const $sortable = window.jQuery(`#ul-${sortableId}`);
+      const $trash = window.jQuery(`#ul-${trashId}`);
 
-      if (sortableElement.length && trashElement.length) {
-        console.log('🔗 Fixing connectWith for sortables');
-
-        if (sortableElement.sortable) {
-          sortableElement.sortable('option', 'connectWith', `#ul-${trashId}`);
+      if ($sortable.length && $trash.length) {
+        if ($sortable.sortable && $trash.sortable) {
+          $sortable.sortable('option', 'connectWith', `#ul-${trashId}`);
+          $trash.sortable('option', 'connectWith', `#ul-${sortableId}`);
+          console.log('✅ ConnectWith configured');
         }
-        if (trashElement.sortable) {
-          trashElement.sortable('option', 'connectWith', `#ul-${sortableId}`);
-        }
-
-        console.log('✅ ConnectWith fixed');
       }
     } catch (error) {
-      console.warn('⚠️ Could not fix connectWith:', error);
+      console.warn('⚠️ ConnectWith configuration warning:', error);
     }
   }, [sortableId, trashId]);
 
-  // Set up solution monitoring
+  // Solution monitoring
   const setupSolutionMonitoring = useCallback(
     (widget: any) => {
       console.log('📊 Setting up solution monitoring...');
 
       const updateSolution = () => {
-        if (!widget) return;
-
         try {
-          const sortableElement = document.getElementById(`ul-${sortableId}`);
-          if (!sortableElement) return;
+          if (!widget) return;
 
           const solution = widget.getModifiedCode(`#ul-${sortableId}`);
           const solutionLines = solution.map((line: any) => {
@@ -240,94 +400,40 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
             onSolutionChange(solutionLines);
           }
         } catch (error) {
-          console.error('❌ Error updating solution:', error);
+          console.warn('⚠️ Solution monitoring warning:', error);
         }
       };
 
-      // Use MutationObserver for solution changes
-      const sortableElement = document.getElementById(`ul-${sortableId}`);
-      if (sortableElement) {
-        const observer = new MutationObserver(() => {
-          // Debounce updates
-          setTimeout(updateSolution, 100);
-        });
+      // Use polling instead of MutationObserver to avoid conflicts
+      const interval = setInterval(updateSolution, 1000);
 
-        observer.observe(sortableElement, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-        });
+      // Store interval for cleanup
+      widget._solutionInterval = interval;
 
-        // Store observer on widget for cleanup
-        widget._solutionObserver = observer;
-      }
-
-      // Initial solution update
-      setTimeout(updateSolution, 200);
+      // Initial update
+      setTimeout(updateSolution, 500);
     },
     [setUserSolution, onSolutionChange, sortableId]
   );
 
-  // Handle feedback from the widget
-  const handleFeedback = useCallback(
-    (feedback: any) => {
-      console.log('📨 Feedback received:', feedback);
-
-      if (feedback.success !== undefined) {
-        setIsCorrect(feedback.success);
-
-        // Extract and save the feedback content
-        if (feedback.html) {
-          setFeedback(feedback.html);
-        } else if (feedback.message) {
-          setFeedback(feedback.message);
-        } else {
-          setFeedback(feedback.success ? 'Your solution is correct!' : '');
-        }
-
-        // Handle additional error feedback
-        if (!feedback.success && feedback.errors) {
-          console.log('📋 Errors:', feedback.errors);
-
-          if (Array.isArray(feedback.errors)) {
-            const errorFeedback = feedback.errors
-              .map((err: any) => {
-                if (typeof err === 'string') return err;
-                if (err.message) return err.message;
-                return JSON.stringify(err);
-              })
-              .join('\n');
-
-            setFeedback((prev) => `${prev || ''}\n${errorFeedback}`);
-          }
-        }
-      }
-    },
-    [setIsCorrect, setFeedback]
-  );
-
-  // Check solution function
+  // Check solution
   const checkSolution = useCallback(async () => {
-    if (!parsonsWidget) {
-      console.warn('⚠️ Cannot check solution: widget not initialized');
+    if (!widgetInstance) {
+      console.warn('⚠️ Cannot check solution: widget not ready');
       return;
     }
 
     console.log('🔍 Checking solution...');
 
     try {
-      // Increment attempts
       incrementAttempts();
 
-      // Get feedback from Parsons widget
-      const feedback = parsonsWidget.getFeedback();
+      const feedback = widgetInstance.getFeedback();
       console.log('📨 Solution feedback:', feedback);
 
-      // Update application state
       if (feedback.success !== undefined) {
         setIsCorrect(feedback.success);
 
-        // Extract and set feedback content
         if (feedback.html) {
           setFeedback(feedback.html);
         } else if (feedback.message) {
@@ -336,7 +442,7 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
 
         // Generate socratic feedback for incorrect solutions
         if (!feedback.success && problemId) {
-          const solution = parsonsWidget
+          const solution = widgetInstance
             .getModifiedCode(`#ul-${sortableId}`)
             .map((line: any) => {
               const indentSpaces = '    '.repeat(line.indent || 0);
@@ -350,10 +456,6 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
               problemId,
               solution
             );
-            console.log(
-              '🤔 Socratic feedback received:',
-              socraticFeedbackResult
-            );
             setSocraticFeedback(socraticFeedbackResult);
           } catch (error) {
             console.error('❌ Error fetching socratic feedback:', error);
@@ -365,7 +467,6 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
           setSocraticFeedback(null);
         }
 
-        // Call the callback
         if (onCheckSolution) {
           onCheckSolution(feedback.success);
         }
@@ -375,7 +476,7 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
       setFeedback('An error occurred while checking your solution.');
     }
   }, [
-    parsonsWidget,
+    widgetInstance,
     incrementAttempts,
     setIsCorrect,
     setFeedback,
@@ -386,85 +487,149 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
     sortableId,
   ]);
 
-  // Initialize widget when dependencies are loaded and problem changes
+  // Initialize widget when ready
   useEffect(() => {
-    if (dependenciesLoaded && currentProblem) {
-      // Check if problem actually changed
+    if (loadingState === 'ready' && currentProblem && !hasError) {
       const problemChanged = currentProblemRef.current !== currentProblem;
 
-      if (problemChanged || !parsonsWidget) {
-        console.log(
-          '🔄 Problem changed or widget not initialized, initializing...'
-        );
+      if (problemChanged || !widgetInstance) {
+        console.log('🚀 Triggering widget initialization...');
         initializeWidget();
       }
     }
-  }, [dependenciesLoaded, currentProblem, parsonsWidget, initializeWidget]);
+  }, [
+    loadingState,
+    currentProblem,
+    widgetInstance,
+    initializeWidget,
+    hasError,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      console.log('🧹 ParsonsWidget component unmounting, cleaning up...');
-      cleanupWidget();
+      console.log('🧹 Component unmounting, starting cleanup...');
+
+      // Clear any intervals
+      if (widgetInstance?._solutionInterval) {
+        clearInterval(widgetInstance._solutionInterval);
+      }
+
+      // Perform cleanup without triggering React re-renders
+      performCleanup();
     };
-  }, [cleanupWidget]);
+  }, [performCleanup, widgetInstance]);
+
+  // Reset function
+  const handleReset = useCallback(() => {
+    console.log('🔄 Resetting widget...');
+    setHasError(false);
+    setErrorMessage(null);
+    setLoadingState('loading');
+
+    // Force cleanup and reinitialize
+    performCleanup();
+
+    setTimeout(() => {
+      if (isParsonsWidgetLoaded()) {
+        setLoadingState('ready');
+      } else {
+        setLoadingState('error');
+        setErrorMessage('Dependencies not available after reset');
+      }
+    }, 500);
+  }, [performCleanup]);
 
   // Render loading state
-  if (!dependenciesLoaded) {
+  if (loadingState === 'loading') {
     return (
-      <div className="parsons-widget-container">
-        <div className="flex justify-center items-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-600">
-              Loading Parsons widget dependencies...
-            </p>
-          </div>
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading Parsons widget...</p>
         </div>
       </div>
     );
   }
 
   // Render error state
-  if (initializationError) {
+  if (loadingState === 'error' || hasError) {
     return (
-      <div className="parsons-widget-container">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          <p>
-            <strong>Error:</strong> {initializationError}
-          </p>
-          <p>Please try refreshing the page.</p>
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <p className="font-bold">Widget Error</p>
+        <p className="text-sm mt-1">
+          {errorMessage || 'An unknown error occurred'}
+        </p>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Reset Widget
+          </button>
+
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          >
+            Refresh Page
+          </button>
         </div>
       </div>
     );
   }
 
-  // Render widget
   return (
-    <div className="parsons-widget-container">
-      <div ref={containerRef} className="parsons-puzzle-container min-h-64">
-        {!parsonsWidget && currentProblem && (
-          <div className="flex justify-center items-center h-64">
+    <ParsonsErrorBoundary onError={handleError}>
+      <div className="parsons-widget-container">
+        {/* Isolated container that React will never touch after creation */}
+        <div
+          ref={isolatedContainerRef}
+          className="parsons-isolated-container"
+          style={{ minHeight: '400px' }}
+        />
+
+        {widgetInstance && loadingState === 'widget-ready' && (
+          <div className="mt-6">
+            <button
+              onClick={checkSolution}
+              className="px-6 py-2 rounded-md text-white font-medium bg-blue-600 hover:bg-blue-700"
+            >
+              Check Solution
+            </button>
+          </div>
+        )}
+
+        {loadingState === 'ready' && !widgetInstance && (
+          <div className="flex justify-center items-center h-32">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
               <p className="text-gray-600">Initializing widget...</p>
             </div>
           </div>
         )}
-      </div>
 
-      {parsonsWidget && (
-        <div className="mt-6">
-          <button
-            onClick={checkSolution}
-            className="px-6 py-2 rounded-md text-white font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
-            disabled={!parsonsWidget}
-          >
-            Check Solution
-          </button>
-        </div>
-      )}
-    </div>
+        {/* Debug info */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
+            <p>
+              <strong>Loading State:</strong> {loadingState}
+            </p>
+            <p>
+              <strong>Widget Ready:</strong> {widgetInstance ? 'Yes' : 'No'}
+            </p>
+            <p>
+              <strong>Has Error:</strong> {hasError ? 'Yes' : 'No'}
+            </p>
+            <p>
+              <strong>Dependencies:</strong>{' '}
+              {isParsonsWidgetLoaded() ? 'Ready' : 'Not Ready'}
+            </p>
+          </div>
+        )}
+      </div>
+    </ParsonsErrorBoundary>
   );
 };
 

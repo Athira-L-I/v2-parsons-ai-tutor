@@ -1,5 +1,5 @@
 /**
- * Fixed ParsonsProblemContainer with unified state management
+ * Fixed ParsonsProblemContainer with improved fallback logic
  * src/components/ParsonsProblemContainer.tsx
  */
 
@@ -37,7 +37,7 @@ interface ParsonsProblemContainerProps {
 }
 
 /**
- * Main container component with integrated adaptive features
+ * Main container component with integrated adaptive features and improved fallback logic
  */
 const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
   problemId,
@@ -70,44 +70,138 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
   const [originalProblem, setOriginalProblem] =
     useState<ParsonsSettings | null>(null);
 
-  // Track the current problem ID to detect changes
-  const [lastProblemId, setLastProblemId] = useState<string | undefined>(
-    problemId
-  );
+  // Track initialization to prevent multiple API calls
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Load problem data when component mounts or problemId changes
   useEffect(() => {
-    if (problemId && problemId !== lastProblemId) {
+    // Prevent multiple initializations
+    if (isInitialized) {
+      return;
+    }
+
+    console.log('🚀 ParsonsProblemContainer initializing...', {
+      hasProblemId: !!problemId,
+      hasInitialProblem: !!initialProblem,
+      currentProblemExists: !!currentProblem,
+    });
+
+    // Priority 1: Use problemId to fetch from API if provided
+    if (problemId) {
+      console.log(`📡 Fetching problem from API: ${problemId}`);
       loadProblemFromApi(problemId);
-      setLastProblemId(problemId);
-    } else if (
-      initialProblem &&
-      (!currentProblem || initialProblem !== currentProblem)
-    ) {
-      // Use initial problem if provided and different from current
-      setCurrentProblem(initialProblem);
-      setOriginalProblem(initialProblem); // Store original for adaptive features
-      setProblemData({
-        id: problemId || 'local-problem',
-        title: title || 'Local Problem',
-        description: description,
-        parsonsSettings: initialProblem,
-      });
+    }
+    // Priority 2: Use initialProblem if no problemId or API fails
+    else if (initialProblem) {
+      console.log('📝 Using provided initial problem');
+      useInitialProblem(initialProblem);
+      setIsInitialized(true);
+    }
+    // Priority 3: Neither provided, wait for user input or show uploader
+    else {
+      console.log('⏳ No problem provided, waiting...');
+      setIsInitialized(true);
+    }
+  }, [problemId, initialProblem]); // Only depend on problem identifiers
+
+  const useInitialProblem = (problem: ParsonsSettings) => {
+    console.log('✅ Setting up initial problem', {
+      hasInitial: !!problem.initial,
+      canIndent: problem.options.can_indent,
+      linesCount: problem.initial.split('\n').filter((line) => line.trim())
+        .length,
+    });
+
+    setCurrentProblem(problem);
+    setOriginalProblem(problem);
+    setProblemData({
+      id: problemId || 'local-problem',
+      title: title || 'Local Problem',
+      description: description,
+      parsonsSettings: problem,
+    });
+
+    // Try to restore progress from local storage if problemId exists
+    if (problemId) {
+      restoreProgressFromStorage(problemId);
+    }
+
+    setError(null);
+    setLoading(false);
+  };
+
+  const loadProblemFromApi = async (id: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`📡 Attempting API fetch for problem: ${id}`);
+      const data = await api.fetchProblemById(id);
+
+      console.log('✅ Problem loaded from API:', data);
+      setProblemData(data);
+      setCurrentProblem(data.parsonsSettings);
+      setOriginalProblem(data.parsonsSettings);
 
       // Try to restore progress from local storage
-      if (problemId) {
-        restoreProgressFromStorage(problemId);
+      restoreProgressFromStorage(id);
+
+      setIsInitialized(true);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to load problem';
+      console.warn(`⚠️ API fetch failed: ${errorMessage}`);
+
+      // Fallback strategy
+      if (initialProblem) {
+        console.log('🔄 Falling back to initial problem');
+        setError(`API unavailable: ${errorMessage}. Using local problem.`);
+        useInitialProblem(initialProblem);
+      } else {
+        // Try to fall back to local storage
+        const localProgress = LocalStorageService.getProblemProgress(id);
+        if (localProgress && localProgress.currentSolution.length > 0) {
+          console.log('🔄 Falling back to local storage data');
+          setError(
+            `API unavailable: ${errorMessage}. Restored from local storage.`
+          );
+          setUserSolution(localProgress.currentSolution);
+
+          // Create minimal problem data from local storage
+          setProblemData({
+            id,
+            title: `Problem ${id} (Local)`,
+            description:
+              'Problem loaded from local storage due to API unavailability',
+            parsonsSettings: null,
+          });
+        } else {
+          console.error(`❌ Complete failure: ${errorMessage}`);
+          setError(`Failed to load problem: ${errorMessage}`);
+        }
       }
+
+      setIsInitialized(true);
+    } finally {
+      setLoading(false);
     }
-  }, [
-    problemId,
-    initialProblem,
-    currentProblem,
-    setCurrentProblem,
-    title,
-    description,
-    lastProblemId,
-  ]);
+  };
+
+  const restoreProgressFromStorage = (id: string) => {
+    try {
+      const progress = LocalStorageService.getProblemProgress(id);
+      if (progress && progress.currentSolution.length > 0) {
+        console.log('💾 Restoring progress from local storage:', progress);
+        setUserSolution(progress.currentSolution);
+
+        if (progress.isCompleted) {
+          console.log('✅ Problem was previously completed');
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to restore progress from local storage:', err);
+    }
+  };
 
   // Save progress to local storage whenever solution changes
   useEffect(() => {
@@ -123,70 +217,8 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     }
   }, [problemId, isCorrect, userSolution]);
 
-  const loadProblemFromApi = async (id: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Try to load from API first
-      const data = await api.fetchProblemById(id);
-      setProblemData(data);
-      setCurrentProblem(data.parsonsSettings);
-      setOriginalProblem(data.parsonsSettings); // Store original
-
-      // Try to restore progress from local storage
-      restoreProgressFromStorage(id);
-
-      console.log('Problem loaded from API:', data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to load problem';
-      console.error('Error loading problem:', err);
-
-      // Try to fall back to local storage
-      const localProgress = LocalStorageService.getProblemProgress(id);
-      if (localProgress && localProgress.currentSolution.length > 0) {
-        console.log('Falling back to local storage data');
-        setError(
-          `API unavailable: ${errorMessage}. Restored from local storage.`
-        );
-        setUserSolution(localProgress.currentSolution);
-
-        // Create minimal problem data from local storage
-        setProblemData({
-          id,
-          title: `Problem ${id} (Local)`,
-          description:
-            'Problem loaded from local storage due to API unavailability',
-          parsonsSettings: null, // Will need to be handled in the UI
-        });
-      } else {
-        setError(`Failed to load problem: ${errorMessage}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const restoreProgressFromStorage = (id: string) => {
-    try {
-      const progress = LocalStorageService.getProblemProgress(id);
-      if (progress && progress.currentSolution.length > 0) {
-        console.log('Restoring progress from local storage:', progress);
-        setUserSolution(progress.currentSolution);
-
-        // If problem was completed, update the context
-        if (progress.isCompleted) {
-          console.log('Problem was previously completed');
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to restore progress from local storage:', err);
-    }
-  };
-
   const handleCheckComplete = (isCorrect: boolean) => {
-    console.log('Solution checked, is correct:', isCorrect);
+    console.log('🎯 Solution checked, is correct:', isCorrect);
 
     // Update adaptive state
     const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
@@ -219,9 +251,14 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
   };
 
   const handleRetry = () => {
+    console.log('🔄 Retrying problem load...');
+    setIsInitialized(false);
+    resetContext();
+
     if (problemId) {
-      resetContext();
       loadProblemFromApi(problemId);
+    } else if (initialProblem) {
+      useInitialProblem(initialProblem);
     }
   };
 
@@ -236,21 +273,27 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
   };
 
   const toggleAdaptiveFeatures = () => {
-    setAdaptiveFeaturesEnabled((prev) => !prev);
-    if (!adaptiveFeaturesEnabled) {
-      setAdaptationMessage(
-        'Adaptive features enabled! Make incorrect attempts to trigger adaptive help.'
-      );
-      setTimeout(() => setAdaptationMessage(null), 3000);
-    } else {
-      setAdaptationMessage(null);
-    }
+    setAdaptiveFeaturesEnabled((prev) => {
+      const newValue = !prev;
+      console.log(`🔧 Adaptive features ${newValue ? 'enabled' : 'disabled'}`);
+
+      if (newValue) {
+        setAdaptationMessage(
+          'Adaptive features enabled! Make incorrect attempts to trigger adaptive help.'
+        );
+        setTimeout(() => setAdaptationMessage(null), 3000);
+      } else {
+        setAdaptationMessage(null);
+      }
+
+      return newValue;
+    });
   };
 
   const applyAdaptiveFeatures = () => {
     if (!originalProblem || !adaptiveFeaturesEnabled) {
       console.warn(
-        'Cannot apply adaptive features: no original problem or features disabled'
+        '❌ Cannot apply adaptive features: no original problem or features disabled'
       );
       return;
     }
@@ -263,7 +306,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
       return;
     }
 
-    console.log('Applying adaptive features...', adaptiveState);
+    console.log('🔧 Applying adaptive features...', adaptiveState);
 
     try {
       const result = adaptiveController.applyAdaptiveFeatures(
@@ -272,6 +315,8 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
       );
 
       if (result.success) {
+        console.log('✅ Adaptive features applied successfully:', result);
+
         // Apply the adapted settings
         setCurrentProblem(result.newSettings);
         setAdaptiveState(result.newState);
@@ -290,16 +335,15 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
 
         setAdaptationMessage(result.message);
         setTimeout(() => setAdaptationMessage(null), 8000);
-
-        console.log('Adaptive features applied successfully:', result);
       } else {
+        console.log('ℹ️ No adaptive changes applied');
         setAdaptationMessage('No adaptive changes were applied');
         setTimeout(() => setAdaptationMessage(null), 3000);
       }
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Unknown error during adaptation';
-      console.error('Error during adaptation:', err);
+      console.error('❌ Error during adaptation:', err);
       setAdaptationMessage(`Error applying adaptive features: ${errorMessage}`);
       setTimeout(() => setAdaptationMessage(null), 5000);
     }
@@ -310,6 +354,8 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
       originalProblem &&
       confirm('Reset to original problem? This will clear your progress.')
     ) {
+      console.log('🔄 Resetting to original problem');
+
       setCurrentProblem(originalProblem);
       setAdaptiveState(adaptiveController.createInitialState());
       setUserSolution([]);
@@ -339,7 +385,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     );
   }
 
-  // Show error state with retry option
+  // Show error state with retry option (only if no current problem)
   if (error && !currentProblem) {
     return (
       <div className="parsons-problem-container">
@@ -349,16 +395,14 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
           </h2>
           <p className="text-red-700 mb-4">{error}</p>
           <div className="flex gap-2">
-            {problemId && (
-              <button
-                onClick={handleRetry}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Retry
-              </button>
-            )}
+            <button
+              onClick={handleRetry}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Retry
+            </button>
             {showUploader && (
-              <p className="text-sm text-red-600">
+              <p className="text-sm text-red-600 self-center ml-4">
                 Or create a new problem using the uploader below.
               </p>
             )}
@@ -391,25 +435,25 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
           </div>
 
           {/* Problem management buttons */}
-          {problemId && (
-            <div className="flex gap-2">
-              <button
-                onClick={handleRetry}
-                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Reload
-              </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRetry}
+              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Reload
+            </button>
+            {problemId && (
               <button
                 onClick={handleClearProgress}
                 className="px-3 py-1 text-sm bg-orange-600 text-white rounded hover:bg-orange-700"
               >
                 Clear Progress
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Error banner for API issues */}
+        {/* Error banner for API issues (when problem is loaded but there was an error) */}
         {error && currentProblem && (
           <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
             <p className="text-sm">{error}</p>
@@ -432,7 +476,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
         <>
           <div className="mb-4">
             {/* Statistics */}
-            <div className="stats flex gap-4 text-sm mb-4">
+            <div className="stats flex flex-wrap gap-2 text-sm mb-4">
               <div className="stat bg-gray-100 p-2 rounded">
                 <span className="font-medium">Attempts:</span> {attempts}
               </div>
@@ -454,7 +498,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
               )}
               {problemId && (
                 <div className="stat bg-blue-100 p-2 rounded">
-                  <span className="font-medium">Problem ID:</span> {problemId}
+                  <span className="font-medium">ID:</span> {problemId}
                 </div>
               )}
               <div
@@ -485,7 +529,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
             <div className="adaptive-controls bg-white p-4 rounded border mb-4">
               <h3 className="text-lg font-semibold mb-3">Adaptive Features</h3>
 
-              <div className="flex gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   onClick={toggleAdaptiveFeatures}
                   className={`px-4 py-2 rounded transition-colors ${
@@ -568,26 +612,15 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <h4 className="font-medium mb-2">Solution Code:</h4>
-                    <pre className="bg-white p-3 rounded border font-mono text-sm overflow-x-auto">
+                    <pre className="bg-white p-3 rounded border font-mono text-sm overflow-x-auto max-h-40">
                       {userSolution.join('\n')}
                     </pre>
                   </div>
                   <div>
                     <h4 className="font-medium mb-2">Current Problem:</h4>
-                    <pre className="bg-white p-3 rounded border font-mono text-sm overflow-x-auto whitespace-pre-wrap">
+                    <pre className="bg-white p-3 rounded border font-mono text-sm overflow-x-auto whitespace-pre-wrap max-h-40">
                       {currentProblem.initial}
                     </pre>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Can Indent:</span>{' '}
-                    {currentProblem.options.can_indent?.toString()}
-                  </div>
-                  <div>
-                    <span className="font-medium">Max Wrong Lines:</span>{' '}
-                    {currentProblem.options.max_wrong_lines}
                   </div>
                 </div>
               </div>
