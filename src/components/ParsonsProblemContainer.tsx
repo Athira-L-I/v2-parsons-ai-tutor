@@ -6,8 +6,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParsonsContext } from '@/contexts/ParsonsContext';
 import dynamic from 'next/dynamic';
-import SolutionChecker from './SolutionChecker';
-import FeedbackPanel from './FeedbackPanel';
 import ProblemUploader from './ProblemUploader';
 import { ParsonsSettings } from '@/@types/types';
 import * as api from '@/lib/api';

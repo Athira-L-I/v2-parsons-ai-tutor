@@ -6,7 +6,7 @@
 import React from 'react';
 import { useParsonsContext } from '@/contexts/ParsonsContext';
 import ParsonsBoard from './ParsonsBoard';
-import FeedbackPanel from './FeedbackPanel';
+import ChatFeedbackPanel from './ChatFeedbackPanel';
 import SolutionChecker from './SolutionChecker';
 
 interface ParsonsPuzzleIntegratedProps {
@@ -51,7 +51,7 @@ const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = ({
 
       {/* Show feedback */}
       <div className="mt-6">
-        <FeedbackPanel />
+        <ChatFeedbackPanel />
       </div>
     </div>
   );
