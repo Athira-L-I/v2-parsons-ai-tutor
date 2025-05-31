@@ -74,6 +74,7 @@ interface ParsonsContextType {
   clearChatHistory: () => void;
   isTyping: boolean;
   setChatLoading: (isTyping: boolean) => void;
+  removeTypingMessages: () => void;
 }
 
 const defaultAdaptiveState = (): AdaptiveState => ({
@@ -114,6 +115,7 @@ const defaultContext: ParsonsContextType = {
   clearChatHistory: () => {},
   isTyping: false,
   setChatLoading: () => {},
+  removeTypingMessages: () => {},
 };
 
 const ParsonsContext = createContext<ParsonsContextType>(defaultContext);
@@ -308,6 +310,10 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     console.log('⏳ Setting chat typing state:', loading);
     setIsTyping(loading);
   }, []);
+
+  const removeTypingMessages = useCallback(() => {
+    setChatMessages((prev) => prev.filter((msg) => !msg.isTyping));
+  }, []);
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -354,6 +360,7 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     clearChatHistory,
     isTyping,
     setChatLoading,
+    removeTypingMessages,
   };
 
   return (
