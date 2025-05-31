@@ -1,0 +1,117 @@
+{
+  "info": {
+    "name": "Parsons Chat API Tests",
+    "description": "Collection of API tests for the new chat feedback endpoint"
+  },
+  "requests": [
+    {
+      "name": "Health Check",
+      "method": "GET",
+      "url": "http://localhost:8000/api/feedback/health",
+      "description": "Test if the feedback service is running"
+    },
+    {
+      "name": "Original Feedback (Backwards Compatibility)",
+      "method": "POST",
+      "url": "http://localhost:8000/api/feedback",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "problemId": "demo-problem-1",
+        "userSolution": ["print('hello')", "x = 5"]
+      },
+      "description": "Test that original feedback endpoint still works"
+    },
+    {
+      "name": "Chat Feedback - First Message",
+      "method": "POST",
+      "url": "http://localhost:8000/api/feedback/chat",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "problemId": "demo-problem-1",
+        "userSolution": [],
+        "chatHistory": [],
+        "currentMessage": "Hello, I'm new to this problem and don't know where to start. Can you help me?"
+      },
+      "description": "Test chat endpoint with no history (first message)"
+    },
+    {
+      "name": "Chat Feedback - With History",
+      "method": "POST", 
+      "url": "http://localhost:8000/api/feedback/chat",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "problemId": "demo-problem-1",
+        "userSolution": ["start = 1", "end = 10"],
+        "chatHistory": [
+          {
+            "id": "msg_1",
+            "role": "tutor",
+            "content": "Hello! I can help you with this Parsons problem. What would you like to know?",
+            "timestamp": 1640995200000
+          },
+          {
+            "id": "msg_2",
+            "role": "student",
+            "content": "I'm confused about the order of these code blocks",
+            "timestamp": 1640995260000
+          },
+          {
+            "id": "msg_3",
+            "role": "tutor", 
+            "content": "That's a great question! Let's think about what this program is trying to do step by step.",
+            "timestamp": 1640995320000
+          }
+        ],
+        "currentMessage": "I think I understand the logic, but I'm not sure about the indentation. How do I know which lines should be indented?"
+      },
+      "description": "Test chat endpoint with conversation history"
+    },
+    {
+      "name": "Chat Feedback - With Solution",
+      "method": "POST",
+      "url": "http://localhost:8000/api/feedback/chat", 
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "problemId": "demo-problem-1",
+        "userSolution": [
+          "start = 1",
+          "end = 10", 
+          "for i in range(start, end + 1):",
+          "if i % 2 == 0:",
+          "print(i)"
+        ],
+        "chatHistory": [],
+        "currentMessage": "I've arranged the blocks but I'm getting an error. Can you help me figure out what's wrong?"
+      },
+      "description": "Test chat endpoint with a user solution for validation"
+    },
+    {
+      "name": "Chat Feedback - Invalid Request (Empty Message)",
+      "method": "POST",
+      "url": "http://localhost:8000/api/feedback/chat",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "problemId": "demo-problem-1",
+        "userSolution": [],
+        "chatHistory": [],
+        "currentMessage": ""
+      },
+      "description": "Test validation - should return 400 for empty message"
+    }
+  ],
+  "curl_examples": {
+    "health_check": "curl -X GET http://localhost:8000/api/feedback/health",
+    "original_feedback": "curl -X POST http://localhost:8000/api/feedback -H 'Content-Type: application/json' -d '{\"problemId\": \"demo-problem-1\", \"userSolution\": [\"print(\\\"hello\\\")\"]}' ",
+    "chat_basic": "curl -X POST http://localhost:8000/api/feedback/chat -H 'Content-Type: application/json' -d '{\"problemId\": \"demo-problem-1\", \"userSolution\": [], \"chatHistory\": [], \"currentMessage\": \"Can you help me with this problem?\"}' "
+  }
+}
