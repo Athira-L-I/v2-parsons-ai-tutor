@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { marked } from 'marked';
 
 // Use environment variable for API key
-const API_KEY = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
+const API_KEY = process.env.OPENROUTER_API_KEY;
 
 if (typeof window !== 'undefined' && !API_KEY) {
   console.error('OpenRouter API key not found in environment variables');
