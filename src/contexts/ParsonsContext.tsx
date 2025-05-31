@@ -10,7 +10,7 @@ import {
   useState,
   useCallback,
 } from 'react';
-import { ParsonsSettings } from '@/@types/types';
+import { ParsonsSettings, ChatMessage } from '@/@types/types';
 import { AdaptiveState } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 
@@ -67,6 +67,13 @@ interface ParsonsContextType {
   updateAdaptiveStateAfterAttempt: (isCorrect: boolean) => void;
   canTriggerAdaptation: () => boolean;
   getAdaptationSuggestions: () => string[];
+
+  // Chat functionality
+  chatMessages: ChatMessage[];
+  addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  clearChatHistory: () => void;
+  isTyping: boolean;
+  setChatLoading: (isTyping: boolean) => void;
 }
 
 const defaultAdaptiveState = (): AdaptiveState => ({
@@ -102,6 +109,11 @@ const defaultContext: ParsonsContextType = {
   updateAdaptiveStateAfterAttempt: () => {},
   canTriggerAdaptation: () => false,
   getAdaptationSuggestions: () => [],
+  chatMessages: [],
+  addChatMessage: () => {},
+  clearChatHistory: () => {},
+  isTyping: false,
+  setChatLoading: () => {},
 };
 
 const ParsonsContext = createContext<ParsonsContextType>(defaultContext);
@@ -196,6 +208,8 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     setAttempts(0);
     setAdaptiveState(defaultAdaptiveState());
     setAdaptationMessage(null);
+    setChatMessages([]);
+    setIsTyping(false);
 
     console.log('✅ ParsonsContext reset complete');
   }, []);
@@ -245,6 +259,8 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     setIsCorrect(null);
     setFeedback(null);
     setSocraticFeedback(null);
+    // Clear chat when problem changes
+    clearChatHistory();
   }, []);
 
   // Enhanced setUserSolution with logging
@@ -266,6 +282,35 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     },
     [isCorrect]
   );
+
+  // Chat message management
+  const addChatMessage = useCallback(
+    (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+      const newMessage: ChatMessage = {
+        ...message,
+        id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+      };
+
+      console.log('💬 Adding chat message:', newMessage);
+      setChatMessages((prev) => [...prev, newMessage]);
+    },
+    []
+  );
+
+  const clearChatHistory = useCallback(() => {
+    console.log('🗑️ Clearing chat history');
+    setChatMessages([]);
+    setIsTyping(false);
+  }, []);
+
+  const setChatLoading = useCallback((loading: boolean) => {
+    console.log('⏳ Setting chat typing state:', loading);
+    setIsTyping(loading);
+  }, []);
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isTyping, setIsTyping] = useState<boolean>(false);
 
   const contextValue: ParsonsContextType = {
     // Core problem state
@@ -302,6 +347,13 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     updateAdaptiveStateAfterAttempt,
     canTriggerAdaptation,
     getAdaptationSuggestions,
+
+    // Chat functionality
+    chatMessages,
+    addChatMessage,
+    clearChatHistory,
+    isTyping,
+    setChatLoading,
   };
 
   return (

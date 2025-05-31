@@ -62,3 +62,11 @@ export interface UnitTest {
   name: string;
   assertEquals: AssertEqualParams;
 }
+
+export interface ChatMessage {
+  id: string;
+  role: 'student' | 'tutor';
+  content: string;
+  timestamp: number;
+  isTyping?: boolean;
+}
