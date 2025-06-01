@@ -31,7 +31,8 @@ export interface BlockItem {
 interface ParsonsContextType {
   // Core problem state
   currentProblem: ParsonsSettings | null;
-  setCurrentProblem: (problem: ParsonsSettings) => void;
+  currentProblemId: string | null;
+  setCurrentProblem: (problem: ParsonsSettings, problemId?: string) => void; // Updated to accept problemId
   userSolution: string[];
   setUserSolution: (solution: string[]) => void;
 
@@ -86,6 +87,7 @@ const defaultAdaptiveState = (): AdaptiveState => ({
 
 const defaultContext: ParsonsContextType = {
   currentProblem: null,
+  currentProblemId: null,
   setCurrentProblem: () => {},
   userSolution: [],
   setUserSolution: () => {},
@@ -137,6 +139,7 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
   const [currentProblem, setCurrentProblem] = useState<ParsonsSettings | null>(
     null
   );
+  const [currentProblemId, setCurrentProblemId] = useState<string | null>(null); // Added to track problem ID
   const [userSolution, setUserSolution] = useState<string[]>([]);
   const [currentBlocks, setCurrentBlocks] = useState<BlockItem[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -244,26 +247,31 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
   );
 
   // Enhanced setCurrentProblem with logging
-  const setCurrentProblemEnhanced = useCallback((problem: ParsonsSettings) => {
-    console.log('📝 Setting current problem:', {
-      hasInitial: !!problem.initial,
-      canIndent: problem.options.can_indent,
-      maxWrongLines: problem.options.max_wrong_lines,
-      linesCount: problem.initial.split('\n').filter((line) => line.trim())
-        .length,
-    });
+  const setCurrentProblemEnhanced = useCallback(
+    (problem: ParsonsSettings, problemId?: string) => {
+      console.log('📝 Setting current problem:', {
+        problemId: problemId || 'no-id-provided',
+        hasInitial: !!problem.initial,
+        canIndent: problem.options.can_indent,
+        maxWrongLines: problem.options.max_wrong_lines,
+        linesCount: problem.initial.split('\n').filter((line) => line.trim())
+          .length,
+      });
 
-    setCurrentProblem(problem);
+      setCurrentProblem(problem);
+      setCurrentProblemId(problemId || null); // Set the problem ID
 
-    // Clear solution when problem changes
-    setUserSolution([]);
-    setCurrentBlocks([]);
-    setIsCorrect(null);
-    setFeedback(null);
-    setSocraticFeedback(null);
-    // Clear chat when problem changes
-    clearChatHistory();
-  }, []);
+      // Clear solution when problem changes
+      setUserSolution([]);
+      setCurrentBlocks([]);
+      setIsCorrect(null);
+      setFeedback(null);
+      setSocraticFeedback(null);
+      // Clear chat when problem changes
+      clearChatHistory();
+    },
+    []
+  );
 
   // Enhanced setUserSolution with logging
   const setUserSolutionEnhanced = useCallback(
@@ -321,6 +329,7 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
   const contextValue: ParsonsContextType = {
     // Core problem state
     currentProblem,
+    currentProblemId,
     setCurrentProblem: setCurrentProblemEnhanced,
     userSolution,
     setUserSolution: setUserSolutionEnhanced,

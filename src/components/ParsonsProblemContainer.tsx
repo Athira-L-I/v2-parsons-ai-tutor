@@ -110,7 +110,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
         .length,
     });
 
-    setCurrentProblem(problem);
+    setCurrentProblem(problem, problemId || 'local-problem');
     setOriginalProblem(problem);
     setProblemData({
       id: problemId || 'local-problem',
@@ -138,12 +138,8 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
 
       console.log('✅ Problem loaded from API:', data);
       setProblemData(data);
-      setCurrentProblem(data.parsonsSettings);
+      setCurrentProblem(data.parsonsSettings, id);
       setOriginalProblem(data.parsonsSettings);
-
-      // Try to restore progress from local storage
-      restoreProgressFromStorage(id);
-
       setIsInitialized(true);
     } catch (err) {
       const errorMessage =
@@ -156,27 +152,11 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
         setError(`API unavailable: ${errorMessage}. Using local problem.`);
         useInitialProblem(initialProblem);
       } else {
-        // Try to fall back to local storage
-        const localProgress = LocalStorageService.getProblemProgress(id);
-        if (localProgress && localProgress.currentSolution.length > 0) {
-          console.log('🔄 Falling back to local storage data');
-          setError(
-            `API unavailable: ${errorMessage}. Restored from local storage.`
-          );
-          setUserSolution(localProgress.currentSolution);
+        console.error(`❌ Failed to load problem: ${errorMessage}`);
+        setError(`Failed to load problem: ${errorMessage}`);
 
-          // Create minimal problem data from local storage
-          setProblemData({
-            id,
-            title: `Problem ${id} (Local)`,
-            description:
-              'Problem loaded from local storage due to API unavailability',
-            parsonsSettings: null,
-          });
-        } else {
-          console.error(`❌ Complete failure: ${errorMessage}`);
-          setError(`Failed to load problem: ${errorMessage}`);
-        }
+        // Do NOT try to restore from local storage when we don't have problem data
+        // as the solution might not match the problem structure
       }
 
       setIsInitialized(true);
@@ -190,6 +170,41 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
       const progress = LocalStorageService.getProblemProgress(id);
       if (progress && progress.currentSolution.length > 0) {
         console.log('💾 Restoring progress from local storage:', progress);
+
+        // SAFETY CHECK - Verify the solution matches the current problem
+        // This prevents loading a solution for a different problem
+        if (currentProblem && currentProblem.initial) {
+          const problemLines = currentProblem.initial
+            .split('\n')
+            .filter(
+              (line) => !line.includes('#distractor') && line.trim().length > 0
+            );
+
+          // Check if at least 70% of solution lines are found in the problem
+          const matchingLines = progress.currentSolution.filter((line) =>
+            problemLines.some((probLine) =>
+              probLine.trim().includes(line.trim())
+            )
+          ).length;
+
+          const matchPercentage =
+            problemLines.length > 0
+              ? (matchingLines / problemLines.length) * 100
+              : 0;
+
+          if (matchPercentage < 70) {
+            console.warn(
+              '⚠️ Stored solution appears to be for a different problem:',
+              {
+                matchPercentage,
+                problemLines: problemLines.length,
+                matchingLines,
+              }
+            );
+            return; // Don't restore incompatible solution
+          }
+        }
+
         setUserSolution(progress.currentSolution);
 
         if (progress.isCompleted) {

@@ -372,20 +372,21 @@ export const generateProblem = async (sourceCode: string) => {
 
 export const sendChatMessage = async (
   problemId: string,
-  currentMessage: string,
-  chatHistory: ChatMessage[],
-  userSolution: string[] = []
-): Promise<ChatFeedbackResponse> => {
+  message: string,
+  chatHistory: any[],
+  currentSolution: string[],
+  solutionContext?: {
+    isCorrect: boolean | null;
+    indentationHints: any[];
+    solutionStatus: string;
+  }
+) => {
   // Input validation
   if (!problemId || typeof problemId !== 'string') {
     throw new Error('Invalid problem ID provided');
   }
 
-  if (
-    !currentMessage ||
-    typeof currentMessage !== 'string' ||
-    !currentMessage.trim()
-  ) {
+  if (!message || typeof message !== 'string' || !message.trim()) {
     throw new Error('Message cannot be empty');
   }
 
@@ -393,7 +394,7 @@ export const sendChatMessage = async (
     throw new Error('Chat history must be an array');
   }
 
-  if (!Array.isArray(userSolution)) {
+  if (!Array.isArray(currentSolution)) {
     throw new Error('User solution must be an array');
   }
 
@@ -407,18 +408,22 @@ export const sendChatMessage = async (
       isTyping: msg.isTyping || false,
     }));
 
-    const requestData: ChatFeedbackRequest = {
+    const requestData = {
       problemId: problemId.trim(),
-      currentMessage: currentMessage.trim(),
+      currentMessage: message.trim(),
       chatHistory: serializedChatHistory,
-      userSolution: userSolution.filter((line) => typeof line === 'string'),
+      // IMPORTANT: Don't filter or trim solution lines to preserve indentation
+      userSolution: currentSolution.filter((line) => typeof line === 'string'),
+      // Add solutionContext to the request data
+      solutionContext: solutionContext,
     };
 
     console.log('📤 Sending chat message:', {
       problemId,
-      messageLength: currentMessage.length,
+      messageLength: message.length,
       historyLength: chatHistory.length,
-      solutionLength: userSolution.length,
+      solutionLength: currentSolution.length,
+      hasSolutionContext: !!solutionContext,
     });
 
     const response = await apiClient.post('/api/feedback/chat', requestData);
@@ -478,7 +483,7 @@ export const sendChatMessage = async (
         chatMessage: {
           id: `offline_${Date.now()}`,
           role: 'tutor',
-          content: generateOfflineChatResponse(currentMessage, userSolution),
+          content: generateOfflineChatResponse(message, currentSolution),
           timestamp: Date.now(),
           isTyping: false,
         },
@@ -509,7 +514,7 @@ export const sendChatMessage = async (
         chatMessage: {
           id: `fallback_${Date.now()}`,
           role: 'tutor',
-          content: generateFallbackChatResponse(currentMessage, userSolution),
+          content: generateFallbackChatResponse(message, currentSolution),
           timestamp: Date.now(),
           isTyping: false,
         },

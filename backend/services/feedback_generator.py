@@ -36,9 +36,9 @@ def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]
     correct_lines_str = "\n".join(correct_lines)
 
     # Clean user solution lines
-    cleaned_user_solution = [line.strip() for line in user_solution if line.strip()]
+    cleaned_user_solution = [line for line in user_solution if line.strip()]
     cleaned_user_solution_str = "\n".join(cleaned_user_solution)
-    
+       
     # If no OpenAI API key is available, use a fallback method
     if not openai.api_key:
         return generate_fallback_feedback(correct_lines, cleaned_user_solution)
@@ -69,37 +69,16 @@ def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]
         - Keep your response brief and targeted (2-3 sentences, with 1-2 questions)
         """
         
-        # Call the OpenAI API
-        try:
-            # Try new OpenAI client (v1.0+)
-            client = openai.OpenAI()
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful programming tutor using the Socratic method."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=200,
-                temperature=0.7,
-            )
-            feedback = response.choices[0].message.content.strip()
-        except AttributeError:
-            # Fall back to old OpenAI client (pre-v1.0)
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful programming tutor using the Socratic method."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=200,
-                temperature=0.7,
-            )
-            feedback = response.choices[0].message.content.strip()
-        
+        feedback = get_openai_response(
+            [
+                {"role": "system", "content": "You are a helpful programming tutor using the Socratic method."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.7,
+        )
         return feedback
-    
     except Exception as e:
-        # If API call fails, use the fallback method
         print(f"OpenAI API error: {str(e)}")
         return generate_fallback_feedback(correct_lines, cleaned_user_solution)
 
@@ -107,11 +86,13 @@ def generate_chat_response(
     problem_settings: Dict[str, Any], 
     user_solution: List[str],
     chat_history: List[Dict[str, Any]],
-    current_message: str
+    current_message: str,
+    solution_context=None
 ) -> str:
     """
     Generates a conversational, context-aware response for chat-based tutoring.
     Enhanced with deeper problem analysis and conversation progression.
+    Now accepts solution_context from frontend for consistency.
     """
     # If no OpenAI API key is available, use fallback
     if not openai.api_key:
@@ -119,7 +100,12 @@ def generate_chat_response(
     
     try:
         # Enhanced analysis of the current state
-        solution_analysis = analyze_solution_state_enhanced(problem_settings, user_solution)
+        solution_analysis = analyze_solution_state_enhanced(
+            problem_settings, 
+            user_solution,
+            solution_context
+        )
+        print(f"Solution analysis: {json.dumps(solution_analysis, indent=2)}")
         
         # Build conversation context with progression tracking
         conversation_context = build_conversation_context_enhanced(chat_history)
@@ -137,16 +123,11 @@ def generate_chat_response(
             message_analysis
         )
         
-        # Call OpenAI API with conversation-optimized settings
-        try:
-            # Try new OpenAI client (v1.0+)
-            client = openai.OpenAI()
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": """You are an expert programming tutor specializing in Python and Parsons problems. Your teaching philosophy:
+        ai_response = get_openai_response(
+            [
+                {
+                    "role": "system",
+                    "content": """You are an expert programming tutor specializing in Python and Parsons problems. Your teaching philosophy:
 
 TEACHING APPROACH:
 - Socratic Method: Guide discovery through strategic questions
@@ -167,52 +148,14 @@ TECHNICAL EXPERTISE:
 - Expert in code structure, indentation, and logical flow
 - Skilled at identifying common programming misconceptions
 - Able to provide step-by-step reasoning for code organization"""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=350,
-                temperature=0.75,
-                presence_penalty=0.2,
-                frequency_penalty=0.1
-            )
-            ai_response = response.choices[0].message.content.strip()
-        except AttributeError:
-            # Fall back to old OpenAI client (pre-v1.0)
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": """You are an expert programming tutor specializing in Python and Parsons problems. Your teaching philosophy:
-
-TEACHING APPROACH:
-- Socratic Method: Guide discovery through strategic questions
-- Diagnostic → Analytical → Guidance progression
-- Build on previous conversation naturally
-- Address specific code issues with concrete examples
-- Encourage metacognitive thinking about programming
-
-CONVERSATION STYLE:
-- Reference student's specific solution attempts
-- Build on what they've already discussed
-- Use their own words and examples when possible
-- Progress from general concepts to specific implementation
-- Celebrate insights and progress
-
-TECHNICAL EXPERTISE:
-- Deep understanding of Python syntax and semantics
-- Expert in code structure, indentation, and logical flow
-- Skilled at identifying common programming misconceptions
-- Able to provide step-by-step reasoning for code organization"""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=350,
-                temperature=0.75,
-                presence_penalty=0.2,
-                frequency_penalty=0.1
-            )
-            ai_response = response.choices[0].message.content.strip()
+                },
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=350,
+            temperature=0.75,
+            presence_penalty=0.2,
+            frequency_penalty=0.1
+        )
         
         # Post-process for conversation quality
         processed_response = post_process_chat_response_enhanced(
@@ -226,7 +169,6 @@ TECHNICAL EXPERTISE:
         
     except Exception as e:
         print(f"Chat API error: {str(e)}")
-        # Fall back to enhanced local response
         return generate_chat_fallback_enhanced(
             current_message, 
             user_solution, 
@@ -234,15 +176,48 @@ TECHNICAL EXPERTISE:
             chat_history
         )
 
-def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solution: List[str]) -> Dict[str, Any]:
+# TODO: use front end solutionStatus instead of checking everything again here
+def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solution: List[str], solution_context=None) -> Dict[str, Any]:
     """
     Enhanced analysis of the current state of the student's solution with detailed problem context.
+    Now accepts optional solution_context from frontend to ensure consistency.
     """
     initial_code = problem_settings["initial"]
     correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
     
     # Clean user solution
-    cleaned_user_solution = [line.strip() for line in user_solution if line.strip()]
+    cleaned_user_solution = [line for line in user_solution if line.strip()]
+    
+    # Use frontend validation if provided
+    if solution_context:
+        # Override our analysis with frontend data
+        has_indentation_issues = solution_context.get('solutionStatus') == 'indentation-issues'
+        is_correct = solution_context.get('isCorrect', None)
+    else:
+        # Continue with backend analysis
+        has_indentation_issues = False
+        is_correct = None
+        
+        # Check indentation using the same logic as the frontend
+        correct_indent_map = {}
+        for line in correct_lines:
+            content = line.strip()
+            if content:
+                indent_level = (len(line) - len(line.lstrip())) // 4
+                correct_indent_map[content] = indent_level
+        
+        # Compare with user solution
+        for user_line in user_solution:
+            content = user_line.strip()
+            if not content:
+                continue
+                
+            expected_indent = correct_indent_map.get(content)
+            if expected_indent is not None:
+                user_indent = (len(user_line) - len(user_line.lstrip())) // 4
+                if user_indent != expected_indent:
+                    has_indentation_issues = True
+                    break
     
     # Basic analysis
     analysis = {
@@ -251,7 +226,7 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
         "expected_length": len(correct_lines),
         "is_complete": len(cleaned_user_solution) >= len(correct_lines),
         "completion_ratio": len(cleaned_user_solution) / max(len(correct_lines), 1),
-        "has_indentation_issues": False,
+        "has_indentation_issues": has_indentation_issues,
         "missing_concepts": [],
         "correct_concepts": [],
         "error_types": [],
@@ -261,10 +236,32 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
     }
     
     # Detailed indentation analysis
-    for line in user_solution:
-        if line.startswith('    ') or line.startswith('\t'):
-            analysis["has_indentation_issues"] = True
-            break
+    analysis["has_indentation_issues"] = False  # Default to no issues
+    
+    # Check indentation using the same logic as the frontend
+    initial_code = problem_settings["initial"]
+    correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
+    
+    # Create map of correct indentation for each line
+    correct_indent_map = {}
+    for line in correct_lines:
+        content = line.strip()
+        if content:
+            indent_level = (len(line) - len(line.lstrip())) // 4
+            correct_indent_map[content] = indent_level
+    
+    # Compare with user solution
+    for user_line in user_solution:
+        content = user_line.strip()
+        if not content:
+            continue
+            
+        expected_indent = correct_indent_map.get(content)
+        if expected_indent is not None:
+            user_indent = (len(user_line) - len(user_line.lstrip())) // 4
+            if user_indent != expected_indent:
+                analysis["has_indentation_issues"] = True
+                break
     
     # Programming concept analysis
     solution_text = ' '.join(cleaned_user_solution).lower()
@@ -972,7 +969,7 @@ def generate_chat_fallback_enhanced(
         return "Functions are like little machines that take inputs and produce outputs. In your blocks, the 'def' line is like setting up the machine, and 'return' is like the machine giving you back the result. Where do you think each part should go?"
     
     elif any(word in message_lower for word in ['loop', 'for', 'while']):
-        return "Loops are Python's way of saying 'do this multiple times.' Think about what needs to be set up before the loop starts, what happens inside the loop each time, and what happens after it's done. How does that apply to your blocks?"
+        return "Loops repeat code multiple times. The code inside the loop should be indented. What's confusing you about the loop in this problem?"
     
     elif any(word in message_lower for word in ['help', 'stuck', 'confused']):
         if len(user_solution) == 0:
@@ -1059,3 +1056,22 @@ def generate_chat_fallback(current_message: str, user_solution: List[str], probl
     else:
         # Generic helpful response
         return "I'm here to help you with this Python problem! Can you tell me more specifically what you're trying to figure out? I can help with code order, indentation, or Python concepts."
+
+# Unified OpenAI chat completion for both v1.x and pre-v1.0 clients
+
+def get_openai_response(messages, max_tokens=200, temperature=0.7, **kwargs):
+    """
+    OpenAI v1.x chat completion using OpenRouter or OpenAI endpoint.
+    """
+    client = openai.OpenAI(
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        base_url="https://openrouter.ai/api/v1"
+    )
+    response = client.chat.completions.create(
+        model='qwen/qwen-2.5-coder-32b-instruct:free',
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        **kwargs
+    )
+    return response.choices[0].message.content.strip()

@@ -11,6 +11,7 @@ const ChatFeedbackPanel: React.FC = () => {
     isCorrect,
     isLoading,
     currentProblem,
+    currentProblemId,
     currentBlocks,
     chatMessages,
     addChatMessage,
@@ -99,6 +100,65 @@ const ChatFeedbackPanel: React.FC = () => {
   );
   const isIndentationProvided = currentProblem?.options.can_indent === false;
 
+  // Function to get the current problem ID
+  const getProblemId = (): string | null => {
+    // First try to get from context
+    if (currentProblemId) {
+      return currentProblemId;
+    }
+
+    // Then try URL params (if available)
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlProblemId = urlParams.get('problemId');
+      if (urlProblemId) {
+        return urlProblemId;
+      }
+    }
+
+    // Try to extract from current problem data
+    if (currentProblem) {
+      // Check if the problem has an ID field (from API)
+      const problemData = (currentProblem as any).id;
+      if (problemData) {
+        return problemData;
+      }
+
+      // Try to generate a stable ID from problem content
+      const contentHash = generateProblemHash(currentProblem);
+      return `problem-${contentHash}`;
+    }
+
+    // Check if we're on a specific route that indicates problem ID
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const problemMatch = path.match(/\/problems\/([^\/]+)/);
+      if (problemMatch) {
+        return problemMatch[1];
+      }
+    }
+
+    return null;
+  };
+
+  // Generate a simple hash from problem content for consistent ID
+  const generateProblemHash = (problem: any): string => {
+    const content = JSON.stringify({
+      initial: problem.initial,
+      canIndent: problem.options.can_indent,
+      maxWrongLines: problem.options.max_wrong_lines,
+    });
+
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(36);
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isSendingMessage || !currentProblem) return;
 
@@ -107,14 +167,6 @@ const ChatFeedbackPanel: React.FC = () => {
     setIsSendingMessage(true);
 
     // Add student message immediately
-    const studentMessage: ChatMessage = {
-      id: `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      role: 'student',
-      content: messageContent,
-      timestamp: Date.now(),
-      isTyping: false,
-    };
-
     addChatMessage({
       role: 'student',
       content: messageContent,
@@ -123,38 +175,48 @@ const ChatFeedbackPanel: React.FC = () => {
     try {
       // Show typing indicator
       setChatLoading(true);
-
-      // Add typing message
-      const typingMessage: ChatMessage = {
-        id: `typing_${Date.now()}`,
-        role: 'tutor',
-        content: '',
-        timestamp: Date.now(),
-        isTyping: true,
-      };
-
       addChatMessage({
         role: 'tutor',
         content: '',
         isTyping: true,
       });
 
-      // Get current user solution as strings
-      const currentSolution = userSolution || [];
+      // IMPORTANT CHANGE: Use solution data with proper indentation
+      const { currentLines } = generateSolutionData();
+
+      // Create solution context to ensure AI knows validation status
+      const solutionContext = {
+        isCorrect,
+        indentationHints,
+        solutionStatus:
+          indentationHints.length > 0
+            ? 'indentation-issues'
+            : isCorrect === true
+            ? 'correct'
+            : isCorrect === false
+            ? 'incorrect'
+            : 'unchecked',
+      };
+
+      // Get the actual problem ID
+      const problemId = getProblemId();
 
       console.log('📤 Sending chat message to API:', {
-        problemId: currentProblem ? 'present' : 'missing',
+        problemId: problemId || 'no-id',
         messageLength: messageContent.length,
         historyLength: chatMessages.length,
-        solutionLength: currentSolution.length,
+        solutionLength: currentLines.length,
+        solutionContext,
+        currentLines,
       });
 
-      // Call the API
+      // Call the API with properly indented code and solution context
       const response = await sendChatMessage(
-        'demo-problem-1', // Use demo problem for now, can be made dynamic later
+        problemId || 'no-id',
         messageContent,
-        chatMessages.filter((msg) => !msg.isTyping), // Exclude typing messages from history
-        currentSolution
+        chatMessages.filter((msg) => !msg.isTyping),
+        currentLines, // <- IMPORTANT: Using currentLines instead of userSolution
+        solutionContext // <- Including validation context
       );
 
       console.log('📥 Received chat response:', {
@@ -199,17 +261,27 @@ const ChatFeedbackPanel: React.FC = () => {
 
       // Remove typing indicator
       setChatLoading(false);
+      removeTypingMessages();
 
       // Determine appropriate error message
       let errorMessage = 'I apologize, but I encountered an error. ';
 
       if (
-        error.message.includes('offline') ||
-        error.message.includes('network')
+        error.message?.includes('timeout') ||
+        error.code === 'ECONNABORTED' ||
+        error.message?.includes('timed out')
+      ) {
+        errorMessage =
+          '⏱️ The request timed out. Our AI tutor is taking longer than expected to respond. ' +
+          'Please try asking your question again in a few moments. ' +
+          'If the problem persists, you might want to try a shorter or more specific question.';
+      } else if (
+        error.message?.includes('offline') ||
+        error.message?.includes('network')
       ) {
         errorMessage +=
           "I'm currently offline, but I'll try to help with what I know. Can you describe your specific question about this problem?";
-      } else if (error.message.includes('server')) {
+      } else if (error.message?.includes('server')) {
         errorMessage +=
           "I'm having technical difficulties. Try asking your question again, or think about what the logical flow of this program should be.";
       } else {
