@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
 import { generateIndentationHints } from '@/lib/adaptiveFeatures';
 import ChatMessage from './ChatMessage';
+import { sendChatMessage } from '@/lib/api';
 
 const ChatFeedbackPanel: React.FC = () => {
   const {
@@ -17,6 +18,9 @@ const ChatFeedbackPanel: React.FC = () => {
     isTyping,
     setChatLoading,
     removeTypingMessages,
+    userSolution,
+    setFeedback,
+    setIsCorrect,
   } = useParsonsContext();
 
   const [inputMessage, setInputMessage] = useState('');
@@ -96,13 +100,21 @@ const ChatFeedbackPanel: React.FC = () => {
   const isIndentationProvided = currentProblem?.options.can_indent === false;
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isSendingMessage) return;
+    if (!inputMessage.trim() || isSendingMessage || !currentProblem) return;
 
     const messageContent = inputMessage.trim();
     setInputMessage('');
     setIsSendingMessage(true);
 
-    // Add student message
+    // Add student message immediately
+    const studentMessage: ChatMessage = {
+      id: `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      role: 'student',
+      content: messageContent,
+      timestamp: Date.now(),
+      isTyping: false,
+    };
+
     addChatMessage({
       role: 'student',
       content: messageContent,
@@ -113,65 +125,127 @@ const ChatFeedbackPanel: React.FC = () => {
       setChatLoading(true);
 
       // Add typing message
+      const typingMessage: ChatMessage = {
+        id: `typing_${Date.now()}`,
+        role: 'tutor',
+        content: '',
+        timestamp: Date.now(),
+        isTyping: true,
+      };
+
       addChatMessage({
         role: 'tutor',
         content: '',
         isTyping: true,
       });
 
-      // Simulate AI response (replace this with actual API call later)
-      await new Promise((resolve) =>
-        setTimeout(resolve, 1500 + Math.random() * 1000)
+      // Get current user solution as strings
+      const currentSolution = userSolution || [];
+
+      console.log('📤 Sending chat message to API:', {
+        problemId: currentProblem ? 'present' : 'missing',
+        messageLength: messageContent.length,
+        historyLength: chatMessages.length,
+        solutionLength: currentSolution.length,
+      });
+
+      // Call the API
+      const response = await sendChatMessage(
+        'demo-problem-1', // Use demo problem for now, can be made dynamic later
+        messageContent,
+        chatMessages.filter((msg) => !msg.isTyping), // Exclude typing messages from history
+        currentSolution
       );
+
+      console.log('📥 Received chat response:', {
+        success: response.success,
+        hasMessage: !!response.chatMessage.content,
+        hasTraditionalFeedback: !!response.traditionalFeedback,
+        hasSolutionValidation: !!response.solutionValidation,
+      });
+
+      // Remove typing indicator
+      setChatLoading(false);
+      removeTypingMessages(); // <-- Add this line
+
+      // Add the actual AI response (this will replace the typing message in the context)
+      addChatMessage({
+        role: 'tutor',
+        content: response.chatMessage.content,
+        isTyping: false,
+      });
+
+      // Update traditional feedback if provided
+      if (response.traditionalFeedback && setFeedback) {
+        setFeedback(response.traditionalFeedback);
+      }
+
+      // Update solution validation if provided
+      if (response.solutionValidation && setIsCorrect) {
+        setIsCorrect(response.solutionValidation.isCorrect);
+      }
+
+      // Show success message briefly if response indicates problems were resolved
+      if (
+        response.success &&
+        response.chatMessage.content.toLowerCase().includes('correct')
+      ) {
+        setTimeout(() => {
+          console.log('💬 AI indicated solution might be correct');
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('❌ Error sending chat message:', error);
 
       // Remove typing indicator
       setChatLoading(false);
 
-      // Generate contextual response based on current state
-      let aiResponse = '';
+      // Determine appropriate error message
+      let errorMessage = 'I apologize, but I encountered an error. ';
 
-      if (isCorrect === true) {
-        aiResponse =
-          "Great job! Your solution is correct. Is there anything else you'd like to understand about this problem or Python programming in general?";
-      } else if (isCorrect === false) {
-        if (indentationHints.length > 0 && !isIndentationProvided) {
-          aiResponse = `I notice you have some indentation issues. ${indentationHints[0].hint} Would you like me to explain more about Python indentation?`;
-        } else if (feedback) {
-          aiResponse =
-            "I see you're having some trouble with the code arrangement. What specific part are you finding challenging?";
-        } else {
-          aiResponse =
-            'Let me help you with this problem. What would you like to know about arranging these code blocks?';
-        }
+      if (
+        error.message.includes('offline') ||
+        error.message.includes('network')
+      ) {
+        errorMessage +=
+          "I'm currently offline, but I'll try to help with what I know. Can you describe your specific question about this problem?";
+      } else if (error.message.includes('server')) {
+        errorMessage +=
+          "I'm having technical difficulties. Try asking your question again, or think about what the logical flow of this program should be.";
       } else {
-        // No solution submitted yet
-        aiResponse =
-          "I'm here to help you with this Parsons problem! Feel free to ask me anything about Python code structure, indentation, or how to approach this puzzle.";
+        errorMessage +=
+          'Please try asking your question again. What specific part of this problem would you like help with?';
       }
 
-      removeTypingMessages();
-      // Add AI response
+      // Add error message as AI response
       addChatMessage({
         role: 'tutor',
-        content: aiResponse,
+        content: errorMessage,
+        isTyping: false,
       });
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setChatLoading(false);
-      addChatMessage({
-        role: 'tutor',
-        content:
-          "I'm sorry, I encountered an error. Please try asking your question again.",
-      });
+
+      // Show user-friendly error message briefly
+      setTimeout(() => {
+        console.log('💬 Chat error handled gracefully');
+      }, 500);
     } finally {
       setIsSendingMessage(false);
+
+      // Focus back on input for next message
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      if (!isSendingMessage && inputMessage.trim()) {
+        handleSendMessage();
+      }
     }
   };
 
@@ -236,20 +310,39 @@ const ChatFeedbackPanel: React.FC = () => {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask a question about this problem..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder={
+              isSendingMessage
+                ? 'Sending message...'
+                : isTyping
+                ? 'AI is typing...'
+                : 'Ask a question about this problem...'
+            }
+            className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+              isSendingMessage || isTyping
+                ? 'border-blue-300 bg-blue-50'
+                : 'border-gray-300'
+            }`}
             disabled={isSendingMessage}
           />
           <button
             onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || isSendingMessage}
-            className={`px-4 py-2 rounded-md text-white font-medium transition-colors ${
-              inputMessage.trim() && !isSendingMessage
-                ? 'bg-blue-600 hover:bg-blue-700'
+            disabled={!inputMessage.trim() || isSendingMessage || isTyping}
+            className={`px-4 py-2 rounded-md text-white font-medium transition-all duration-200 ${
+              inputMessage.trim() && !isSendingMessage && !isTyping
+                ? 'bg-blue-600 hover:bg-blue-700 transform hover:scale-105'
                 : 'bg-gray-300 cursor-not-allowed'
             }`}
           >
-            {isSendingMessage ? 'Sending...' : 'Send'}
+            {isSendingMessage ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                Sending
+              </div>
+            ) : isTyping ? (
+              'AI Typing...'
+            ) : (
+              'Send'
+            )}
           </button>
         </div>
       </div>
