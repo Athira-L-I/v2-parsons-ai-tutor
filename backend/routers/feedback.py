@@ -90,7 +90,8 @@ async def get_chat_feedback(request: ChatFeedbackRequest):
                 problem["parsonsSettings"],
                 request.userSolution,
                 validated_chat_history,
-                request.currentMessage
+                request.currentMessage,
+                solution_context=request.solutionContext
             )
         except Exception as chat_error:
             print(f"Chat generation error: {chat_error}")

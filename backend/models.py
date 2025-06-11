@@ -83,6 +83,7 @@ class ChatFeedbackRequest(BaseModel):
     userSolution: List[str]
     chatHistory: List[ChatMessage]
     currentMessage: str
+    solutionContext: Optional[Dict[str, Any]] = None 
 
     @validator('chatHistory')
     def validate_chat_history(cls, v):

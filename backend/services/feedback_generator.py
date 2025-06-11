@@ -18,14 +18,19 @@ load_dotenv(dotenv_path=dotenv_path)
 # Configure OpenAI API
 openai.api_key = os.getenv("OPENROUTER_API_KEY")
 
-def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]) -> str:
+def generate_feedback(
+    problem_settings: Dict[str, Any], 
+    user_solution: List[str],
+    solution_context: Dict[str, Any] = None  # Add this parameter
+) -> str:
     """
     Generates Socratic feedback for a student's solution attempt using AI.
-    This is the ORIGINAL function - preserved for backwards compatibility.
+    Now accepts solution_context from frontend for consistency with chat response.
     
     Args:
         problem_settings: The ParsonsSettings of the problem
         user_solution: The user's submitted solution as a list of code lines
+        solution_context: Optional validation data from the frontend
     
     Returns:
         A string containing Socratic-style feedback
@@ -35,15 +40,22 @@ def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]
     correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
     correct_lines_str = "\n".join(correct_lines)
 
-    # Clean user solution lines
+    # Clean user solution lines (but preserve indentation)
     cleaned_user_solution = [line for line in user_solution if line.strip()]
     cleaned_user_solution_str = "\n".join(cleaned_user_solution)
-       
+    
     # If no OpenAI API key is available, use a fallback method
     if not openai.api_key:
         return generate_fallback_feedback(correct_lines, cleaned_user_solution)
     
     try:
+        # Get solution analysis - use frontend context if available
+        solution_analysis = analyze_solution_state_enhanced(
+            problem_settings, 
+            user_solution,
+            solution_context=solution_context
+        )
+        
         # Create a prompt for the AI
         prompt = f"""
         I'm helping a student learn programming through Parsons problems (code reordering exercises).
@@ -57,6 +69,9 @@ def generate_feedback(problem_settings: Dict[str, Any], user_solution: List[str]
         ```python
         {cleaned_user_solution_str}
         ```
+        
+        Solution analysis:
+        {json.dumps(solution_analysis, indent=2)}
         
         Please provide Socratic-style feedback - guide the student with questions rather than giving away the answer.
         Focus on conceptual understanding and logical flow. Help them discover where their solution might be incorrect.
@@ -87,7 +102,7 @@ def generate_chat_response(
     user_solution: List[str],
     chat_history: List[Dict[str, Any]],
     current_message: str,
-    solution_context=None
+    solution_context: Dict[str, Any] = None
 ) -> str:
     """
     Generates a conversational, context-aware response for chat-based tutoring.
@@ -99,12 +114,20 @@ def generate_chat_response(
         return generate_chat_fallback_enhanced(current_message, user_solution, problem_settings, chat_history)
     
     try:
+
+        # Log that we're using frontend context
+        if solution_context:
+            print(f"🔗 Using frontend solution context in chat response generation")
+        else:
+            print(f"⚠️ No frontend context available, using backend analysis")
+
         # Enhanced analysis of the current state
         solution_analysis = analyze_solution_state_enhanced(
             problem_settings, 
             user_solution,
-            solution_context
+            solution_context=solution_context
         )
+    
         print(f"Solution analysis: {json.dumps(solution_analysis, indent=2)}")
         
         # Build conversation context with progression tracking
@@ -176,11 +199,10 @@ TECHNICAL EXPERTISE:
             chat_history
         )
 
-# TODO: use front end solutionStatus instead of checking everything again here
 def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solution: List[str], solution_context=None) -> Dict[str, Any]:
     """
     Enhanced analysis of the current state of the student's solution with detailed problem context.
-    Now accepts optional solution_context from frontend to ensure consistency.
+    Now prioritizes frontend solution_context to avoid duplicate analysis.
     """
     initial_code = problem_settings["initial"]
     correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
@@ -188,80 +210,54 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
     # Clean user solution
     cleaned_user_solution = [line for line in user_solution if line.strip()]
     
-    # Use frontend validation if provided
-    if solution_context:
-        # Override our analysis with frontend data
-        has_indentation_issues = solution_context.get('solutionStatus') == 'indentation-issues'
-        is_correct = solution_context.get('isCorrect', None)
-    else:
-        # Continue with backend analysis
-        has_indentation_issues = False
-        is_correct = None
-        
-        # Check indentation using the same logic as the frontend
-        correct_indent_map = {}
-        for line in correct_lines:
-            content = line.strip()
-            if content:
-                indent_level = (len(line) - len(line.lstrip())) // 4
-                correct_indent_map[content] = indent_level
-        
-        # Compare with user solution
-        for user_line in user_solution:
-            content = user_line.strip()
-            if not content:
-                continue
-                
-            expected_indent = correct_indent_map.get(content)
-            if expected_indent is not None:
-                user_indent = (len(user_line) - len(user_line.lstrip())) // 4
-                if user_indent != expected_indent:
-                    has_indentation_issues = True
-                    break
-    
-    # Basic analysis
+    # Initialize basic analysis structure
     analysis = {
         "has_solution": len(cleaned_user_solution) > 0,
         "solution_length": len(cleaned_user_solution),
         "expected_length": len(correct_lines),
         "is_complete": len(cleaned_user_solution) >= len(correct_lines),
         "completion_ratio": len(cleaned_user_solution) / max(len(correct_lines), 1),
-        "has_indentation_issues": has_indentation_issues,
+        "has_indentation_issues": False,
         "missing_concepts": [],
         "correct_concepts": [],
         "error_types": [],
         "specific_issues": [],
         "code_structure_analysis": {},
-        "comparison_with_correct": {}
+        "comparison_with_correct": {},
+        "is_correct": None,
+        "solution_status": "unchecked"
     }
     
-    # Detailed indentation analysis
-    analysis["has_indentation_issues"] = False  # Default to no issues
+    # Use frontend validation data when available (this fixes the TODO)
+    if solution_context:
+        print(f"Using frontend solution context: {solution_context}")
+        
+        # Trust the frontend's analysis
+        analysis["has_indentation_issues"] = solution_context.get('solutionStatus') == 'indentation-issues'
+        analysis["is_correct"] = solution_context.get('isCorrect', None)
+        analysis["solution_status"] = solution_context.get('solutionStatus', 'unchecked')
+        
+        # If frontend provided indentation hints, use that count
+        indentation_hints = solution_context.get('indentationHints', [])
+        if isinstance(indentation_hints, list):
+            analysis["has_indentation_issues"] = len(indentation_hints) > 0
+            if len(indentation_hints) > 0:
+                analysis["specific_issues"].append(f"{len(indentation_hints)} indentation issue(s) found by frontend")
+        
+        print(f"Frontend analysis used - indentation issues: {analysis['has_indentation_issues']}, correct: {analysis['is_correct']}")
+        
+    else:
+        print("No frontend context provided, performing backend analysis")
+        
+        # Fallback: Only do backend analysis if frontend context is not available
+        # This is the minimal analysis needed when frontend data is missing
+        analysis["has_indentation_issues"] = check_indentation_backend_fallback(
+            correct_lines, user_solution
+        )
+        analysis["solution_status"] = "backend-analyzed"
     
-    # Check indentation using the same logic as the frontend
-    initial_code = problem_settings["initial"]
-    correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
-    
-    # Create map of correct indentation for each line
-    correct_indent_map = {}
-    for line in correct_lines:
-        content = line.strip()
-        if content:
-            indent_level = (len(line) - len(line.lstrip())) // 4
-            correct_indent_map[content] = indent_level
-    
-    # Compare with user solution
-    for user_line in user_solution:
-        content = user_line.strip()
-        if not content:
-            continue
-            
-        expected_indent = correct_indent_map.get(content)
-        if expected_indent is not None:
-            user_indent = (len(user_line) - len(user_line.lstrip())) // 4
-            if user_indent != expected_indent:
-                analysis["has_indentation_issues"] = True
-                break
+    # Always perform these analyses regardless of frontend context
+    # (These are supplementary and don't duplicate frontend work)
     
     # Programming concept analysis
     solution_text = ' '.join(cleaned_user_solution).lower()
@@ -287,14 +283,7 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
         elif has_in_correct and not has_in_solution:
             analysis["missing_concepts"].append(concept)
     
-    # Detailed comparison with correct solution
-    if len(cleaned_user_solution) > 0 and len(correct_lines) > 0:
-        analysis["comparison_with_correct"] = compare_solutions_detailed(
-            cleaned_user_solution, 
-            correct_lines
-        )
-    
-    # Error type classification
+    # Error type classification based on analysis
     if analysis["solution_length"] < analysis["expected_length"]:
         analysis["error_types"].append("incomplete_solution")
         analysis["specific_issues"].append(f"Missing {analysis['expected_length'] - analysis['solution_length']} code block(s)")
@@ -304,16 +293,61 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
     
     if analysis["has_indentation_issues"]:
         analysis["error_types"].append("indentation_error")
-        analysis["specific_issues"].append("Indentation needs attention")
+        # Only add generic message if frontend didn't provide specific details
+        if not solution_context or not solution_context.get('indentationHints'):
+            analysis["specific_issues"].append("Indentation needs attention")
     
     if analysis["missing_concepts"]:
         analysis["error_types"].append("missing_concepts")
         analysis["specific_issues"].append(f"Missing: {', '.join(analysis['missing_concepts'])}")
     
-    # Code structure analysis
+    # Detailed comparison with correct solution (supplementary analysis)
+    if len(cleaned_user_solution) > 0 and len(correct_lines) > 0:
+        analysis["comparison_with_correct"] = compare_solutions_detailed(
+            cleaned_user_solution, 
+            correct_lines
+        )
+    
+    # Code structure analysis (supplementary)
     analysis["code_structure_analysis"] = analyze_code_structure(cleaned_user_solution, correct_lines)
     
+    print(f"Final analysis summary - errors: {analysis['error_types']}, issues: {len(analysis['specific_issues'])}")
+    
     return analysis
+
+
+def check_indentation_backend_fallback(correct_lines: List[str], user_solution: List[str]) -> bool:
+    """
+    Fallback indentation checking when frontend context is not available.
+    This is a simplified version that only runs when necessary.
+    """
+    try:
+        # Create map of correct indentation for each line
+        correct_indent_map = {}
+        for line in correct_lines:
+            content = line.strip()
+            if content:
+                indent_level = (len(line) - len(line.lstrip())) // 4
+                correct_indent_map[content] = indent_level
+        
+        # Compare with user solution
+        for user_line in user_solution:
+            content = user_line.strip()
+            if not content:
+                continue
+                
+            expected_indent = correct_indent_map.get(content)
+            if expected_indent is not None:
+                user_indent = (len(user_line) - len(user_line.lstrip())) // 4
+                if user_indent != expected_indent:
+                    return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"Backend indentation analysis error: {e}")
+        return False  # Default to no issues if analysis fails
+
 
 def compare_solutions_detailed(user_solution: List[str], correct_solution: List[str]) -> Dict[str, Any]:
     """
