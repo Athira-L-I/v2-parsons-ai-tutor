@@ -239,20 +239,36 @@ const ParsonsBoard: React.FC = () => {
     handleDragOver,
     handleDropToSortable,
     handleDropToTrash,
-  } = useDragAndDrop({ sortableBlocks, trashBlocks }, updateBlocks);
-  // ✅ Block initialization with adaptive features support
+  } = useDragAndDrop({ sortableBlocks, trashBlocks }, updateBlocks);  // ✅ Block initialization with adaptive features support - Smart re-initialization
   useEffect(() => {
     if (!currentProblem) return;
 
-    // Always re-initialize when currentProblem changes to support adaptive features
+    // Check if we actually need to re-initialize blocks
+    const hasBlocks = sortableBlocks.length > 0 || trashBlocks.length > 0;
+    
+    // Only re-initialize if:
+    // 1. No blocks exist yet (first time)
+    // 2. The problem structure has significantly changed (different line count or structure)
     const lines = currentProblem.initial
       .split('\n')
       .filter((line) => line.trim());
     
+    const expectedBlockCount = lines.length;
+    const currentBlockCount = sortableBlocks.length + trashBlocks.length;
+    
+    // Skip re-initialization if blocks already exist and count matches expected
+    if (hasBlocks && currentBlockCount === expectedBlockCount) {
+      console.log('🔄 Skipping block re-initialization - blocks already exist and count matches');
+      return;
+    }
+    
     console.log('🔄 Initializing blocks from problem:', {
       totalLines: lines.length,
       combinedLines: lines.filter(line => line.includes('\\n')).length,
-      distractorLines: lines.filter(line => line.includes('#distractor')).length
+      distractorLines: lines.filter(line => line.includes('#distractor')).length,
+      hasExistingBlocks: hasBlocks,
+      currentBlockCount,
+      expectedBlockCount
     });
 
     const initialBlocks = lines.map((line, index) => {
@@ -327,7 +343,7 @@ const ParsonsBoard: React.FC = () => {
     }
     
     console.log('✅ Block initialization complete');
-  }, [currentProblem, updateBlocks]); // Removed length dependencies to ensure re-initialization
+  }, [currentProblem, updateBlocks, sortableBlocks.length, trashBlocks.length]); // Added block lengths to dependencies
 
   // ✅ Handle indentation mode changes
   useEffect(() => {

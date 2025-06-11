@@ -243,7 +243,6 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
     },
     [updateAdaptiveStateAfterAttempt]
   );
-
   // Enhanced setCurrentProblem with logging
   const setCurrentProblemEnhanced = useCallback(
     (problem: ParsonsSettings, problemId?: string) => {
@@ -256,19 +255,30 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
           .length,
       });
 
+      // Check if this is actually a different problem structure
+      const isProblemStructureChanged = currentProblem === null || 
+        currentProblem.initial !== problem.initial ||
+        currentProblem.options.can_indent !== problem.options.can_indent ||
+        currentProblem.options.max_wrong_lines !== problem.options.max_wrong_lines;
+
       setCurrentProblem(problem);
       setCurrentProblemId(problemId || null); // Set the problem ID
 
-      // Clear solution when problem changes
-      setUserSolution([]);
-      setCurrentBlocks([]);
-      setIsCorrect(null);
-      setFeedback(null);
-      setSocraticFeedback(null);
-      // Clear chat when problem changes
-      clearChatHistory();
-    },
-    []
+      // Only clear solution when problem structure actually changes
+      if (isProblemStructureChanged) {
+        console.log('📝 Problem structure changed, clearing solution and blocks');
+        setUserSolution([]);
+        setCurrentBlocks([]);
+        setIsCorrect(null);
+        setFeedback(null);
+        setSocraticFeedback(null);
+        // Clear chat when problem changes
+        clearChatHistory();
+      } else {
+        console.log('📝 Problem structure unchanged, preserving current solution');
+      }    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentProblem]
   );
 
   // Enhanced setUserSolution with logging
