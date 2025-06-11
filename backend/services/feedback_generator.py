@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 import json
 import re
+from .shared_validation import SharedValidationService
 
 # Get the current file's directory
 current_dir = Path(__file__).parent
@@ -202,88 +203,48 @@ TECHNICAL EXPERTISE:
 def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solution: List[str], solution_context=None) -> Dict[str, Any]:
     """
     Enhanced analysis of the current state of the student's solution with detailed problem context.
-    Now prioritizes frontend solution_context to avoid duplicate analysis.
+    Now uses SharedValidationService for consistent validation logic.
     """
-    initial_code = problem_settings["initial"]
-    correct_lines = [line for line in initial_code.split('\n') if line.strip() and '#distractor' not in line]
+    # Use the shared validation service for core validation
+    validation_result = SharedValidationService.validate_solution_complete(
+        problem_settings=problem_settings,
+        user_solution=user_solution,
+        solution_context=solution_context
+    )
     
-    # Clean user solution
-    cleaned_user_solution = [line for line in user_solution if line.strip()]
+    # Get correct lines for additional analysis
+    correct_lines = SharedValidationService.extract_correct_lines(problem_settings)
+    cleaned_user_solution = SharedValidationService.clean_user_solution(user_solution)
     
-    # Initialize basic analysis structure
-    analysis = {
-        "has_solution": len(cleaned_user_solution) > 0,
-        "solution_length": len(cleaned_user_solution),
-        "expected_length": len(correct_lines),
-        "is_complete": len(cleaned_user_solution) >= len(correct_lines),
-        "completion_ratio": len(cleaned_user_solution) / max(len(correct_lines), 1),
-        "has_indentation_issues": False,
+    # Start with the validation result as the base
+    analysis = validation_result.copy()
+    
+    # Add additional analysis fields
+    analysis.update({
         "missing_concepts": [],
         "correct_concepts": [],
         "error_types": [],
-        "specific_issues": [],
         "code_structure_analysis": {},
         "comparison_with_correct": {},
-        "is_correct": None,
-        "solution_status": "unchecked"
-    }
+        "solution_status": "checked"
+    })
     
-    # Use frontend validation data when available (this fixes the TODO)
+    # Log the context usage
     if solution_context:
-        print(f"Using frontend solution context: {solution_context}")
-        
-        # Trust the frontend's analysis
-        analysis["has_indentation_issues"] = solution_context.get('solutionStatus') == 'indentation-issues'
-        analysis["is_correct"] = solution_context.get('isCorrect', None)
-        analysis["solution_status"] = solution_context.get('solutionStatus', 'unchecked')
-        
-        # If frontend provided indentation hints, use that count
-        indentation_hints = solution_context.get('indentationHints', [])
-        if isinstance(indentation_hints, list):
-            analysis["has_indentation_issues"] = len(indentation_hints) > 0
-            if len(indentation_hints) > 0:
-                analysis["specific_issues"].append(f"{len(indentation_hints)} indentation issue(s) found by frontend")
-        
-        print(f"Frontend analysis used - indentation issues: {analysis['has_indentation_issues']}, correct: {analysis['is_correct']}")
-        
+        print(f"Using frontend solution context in enhanced analysis")
     else:
-        print("No frontend context provided, performing backend analysis")
-        
-        # Fallback: Only do backend analysis if frontend context is not available
-        # This is the minimal analysis needed when frontend data is missing
-        analysis["has_indentation_issues"] = check_indentation_backend_fallback(
-            correct_lines, user_solution
-        )
-        analysis["solution_status"] = "backend-analyzed"
+        print("No frontend context provided, using backend validation")
     
-    # Always perform these analyses regardless of frontend context
-    # (These are supplementary and don't duplicate frontend work)
+    # Perform supplementary analyses (these don't duplicate validation work)
     
-    # Programming concept analysis
-    solution_text = ' '.join(cleaned_user_solution).lower()
-    correct_text = ' '.join(correct_lines).lower()
+    # Programming concept analysis using the shared service
+    concept_analysis = SharedValidationService.analyze_programming_concepts(
+        cleaned_user_solution, correct_lines
+    )
+    analysis["missing_concepts"] = concept_analysis["missing_concepts"]
+    analysis["correct_concepts"] = concept_analysis["correct_concepts"]
     
-    concepts = {
-        "functions": {"keywords": ["def ", "return"], "description": "function definition"},
-        "loops": {"keywords": ["for ", "while "], "description": "iteration/loops"},
-        "conditionals": {"keywords": ["if ", "else", "elif"], "description": "conditional logic"},
-        "variables": {"keywords": ["="], "description": "variable assignment"},
-        "output": {"keywords": ["print("], "description": "output/printing"},
-        "input": {"keywords": ["input("], "description": "user input"},
-        "lists": {"keywords": ["[", "]", ".append", ".extend"], "description": "list operations"},
-        "strings": {"keywords": ["'", '"', ".format", "f'"], "description": "string handling"}
-    }
-    
-    for concept, details in concepts.items():
-        has_in_solution = any(keyword in solution_text for keyword in details["keywords"])
-        has_in_correct = any(keyword in correct_text for keyword in details["keywords"])
-        
-        if has_in_solution and has_in_correct:
-            analysis["correct_concepts"].append(concept)
-        elif has_in_correct and not has_in_solution:
-            analysis["missing_concepts"].append(concept)
-    
-    # Error type classification based on analysis
+    # Error type classification based on validation result
     if analysis["solution_length"] < analysis["expected_length"]:
         analysis["error_types"].append("incomplete_solution")
         analysis["specific_issues"].append(f"Missing {analysis['expected_length'] - analysis['solution_length']} code block(s)")
@@ -293,8 +254,8 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
     
     if analysis["has_indentation_issues"]:
         analysis["error_types"].append("indentation_error")
-        # Only add generic message if frontend didn't provide specific details
-        if not solution_context or not solution_context.get('indentationHints'):
+        # Only add generic message if specific details aren't already provided
+        if not any("indentation" in issue.lower() for issue in analysis["specific_issues"]):
             analysis["specific_issues"].append("Indentation needs attention")
     
     if analysis["missing_concepts"]:
@@ -303,99 +264,16 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
     
     # Detailed comparison with correct solution (supplementary analysis)
     if len(cleaned_user_solution) > 0 and len(correct_lines) > 0:
-        analysis["comparison_with_correct"] = compare_solutions_detailed(
+        analysis["comparison_with_correct"] = SharedValidationService.compare_solutions_detailed(
             cleaned_user_solution, 
             correct_lines
         )
-    
-    # Code structure analysis (supplementary)
+      # Code structure analysis (supplementary)
     analysis["code_structure_analysis"] = analyze_code_structure(cleaned_user_solution, correct_lines)
     
     print(f"Final analysis summary - errors: {analysis['error_types']}, issues: {len(analysis['specific_issues'])}")
     
     return analysis
-
-
-def check_indentation_backend_fallback(correct_lines: List[str], user_solution: List[str]) -> bool:
-    """
-    Fallback indentation checking when frontend context is not available.
-    This is a simplified version that only runs when necessary.
-    """
-    try:
-        # Create map of correct indentation for each line
-        correct_indent_map = {}
-        for line in correct_lines:
-            content = line.strip()
-            if content:
-                indent_level = (len(line) - len(line.lstrip())) // 4
-                correct_indent_map[content] = indent_level
-        
-        # Compare with user solution
-        for user_line in user_solution:
-            content = user_line.strip()
-            if not content:
-                continue
-                
-            expected_indent = correct_indent_map.get(content)
-            if expected_indent is not None:
-                user_indent = (len(user_line) - len(user_line.lstrip())) // 4
-                if user_indent != expected_indent:
-                    return True
-        
-        return False
-        
-    except Exception as e:
-        print(f"Backend indentation analysis error: {e}")
-        return False  # Default to no issues if analysis fails
-
-
-def compare_solutions_detailed(user_solution: List[str], correct_solution: List[str]) -> Dict[str, Any]:
-    """
-    Provides detailed comparison between user and correct solutions.
-    """
-    comparison = {
-        "matching_lines": [],
-        "misplaced_lines": [],
-        "missing_lines": [],
-        "extra_lines": [],
-        "order_issues": [],
-        "first_error_position": None
-    }
-    
-    # Find matching lines
-    for i, user_line in enumerate(user_solution):
-        for j, correct_line in enumerate(correct_solution):
-            if user_line.strip() == correct_line.strip():
-                comparison["matching_lines"].append({
-                    "line": user_line.strip(),
-                    "user_pos": i,
-                    "correct_pos": j,
-                    "is_correct_position": i == j
-                })
-                if i != j and comparison["first_error_position"] is None:
-                    comparison["first_error_position"] = i
-                break
-    
-    # Find missing lines
-    user_lines_set = set(line.strip() for line in user_solution)
-    correct_lines_set = set(line.strip() for line in correct_solution)
-    
-    comparison["missing_lines"] = list(correct_lines_set - user_lines_set)
-    comparison["extra_lines"] = list(user_lines_set - correct_lines_set)
-    
-    # Analyze order issues
-    matching_positions = [(match["user_pos"], match["correct_pos"]) for match in comparison["matching_lines"]]
-    matching_positions.sort()
-    
-    for i in range(1, len(matching_positions)):
-        if matching_positions[i][1] < matching_positions[i-1][1]:
-            comparison["order_issues"].append({
-                "line": user_solution[matching_positions[i][0]].strip(),
-                "current_pos": matching_positions[i][0],
-                "should_be_before": user_solution[matching_positions[i-1][0]].strip()
-            })
-    
-    return comparison
 
 def analyze_code_structure(user_solution: List[str], correct_solution: List[str]) -> Dict[str, Any]:
     """

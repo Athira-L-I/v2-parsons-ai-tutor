@@ -1,56 +1,26 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+from .shared_validation import SharedValidationService
 
-def validate_solution(problem_settings: Dict[str, Any], user_solution: List[str]) -> Dict[str, Any]:
+def validate_solution(
+    problem_settings: Dict[str, Any], 
+    user_solution: List[str],
+    solution_context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
     Validates if the user's solution matches the expected correct solution.
+    Now uses the shared validation service for consistent validation logic.
     
     Args:
         problem_settings: The ParsonsSettings of the problem
         user_solution: The user's submitted solution as a list of code lines
+        solution_context: Optional frontend validation context
     
     Returns:
         A SolutionValidation object with isCorrect flag and optional details
     """
-    # Extract the correct solution lines from the problem settings
-    initial_code = problem_settings["initial"]
-    correct_lines = []
-    
-    # Process each line in the initial code
-    for line in initial_code.split('\n'):
-        # Skip empty lines
-        if not line.strip():
-            continue
-        
-        # Skip distractor lines (marked with #distractor)
-        if '#distractor' in line:
-            continue
-        
-        # Add this line to the correct solution (PRESERVE INDENTATION)
-        correct_lines.append(line)  # Don't strip here
-    
-    # Clean user solution lines (PRESERVE INDENTATION)
-    cleaned_user_solution = [line for line in user_solution if line.strip()]
-    
-    # Compare the solutions
-    is_correct = (len(cleaned_user_solution) == len(correct_lines))
-    
-    if is_correct:
-        # Check each line for both content AND indentation
-        for i, (user_line, correct_line) in enumerate(zip(cleaned_user_solution, correct_lines)):
-            # Check content first
-            if user_line.strip() != correct_line.strip():
-                is_correct = False
-                break
-            
-            # Check indentation
-            user_indent = len(user_line) - len(user_line.lstrip())
-            correct_indent = len(correct_line) - len(correct_line.lstrip())
-            if user_indent != correct_indent:
-                is_correct = False
-                break
-    
-    # Return the validation result
-    return {
-        "isCorrect": is_correct,
-        "details": "Solution is correct!" if is_correct else "Solution does not match the expected output or has incorrect indentation."
-    }
+    # Use the shared validation service for consistent validation
+    return SharedValidationService.validate_solution_complete(
+        problem_settings=problem_settings,
+        user_solution=user_solution,
+        solution_context=solution_context
+    )

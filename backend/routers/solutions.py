@@ -16,10 +16,13 @@ async def check_solution(submission: SolutionSubmission) -> SolutionValidation:
     
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-    
-    # Validate the solution
+      # Validate the solution
     try:
-        result = validate_solution(problem["parsonsSettings"], submission.solution)
+        result = validate_solution(
+            problem["parsonsSettings"], 
+            submission.solution,
+            submission.solutionContext
+        )
         return result
     except Exception as e:
         raise HTTPException(

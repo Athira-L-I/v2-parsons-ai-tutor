@@ -29,12 +29,12 @@ async def get_feedback(request: FeedbackRequest):
     
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-    
-    # Generate feedback
+      # Generate feedback
     try:
         feedback = generate_feedback(
             problem["parsonsSettings"], 
-            request.userSolution
+            request.userSolution,
+            request.solutionContext
         )
         
         return {"feedback": feedback}
@@ -112,17 +112,18 @@ async def get_chat_feedback(request: ChatFeedbackRequest):
         solution_validation = None
         
         if request.userSolution and len(request.userSolution) > 0:
-            try:
-                # Get traditional feedback
+            try:                # Get traditional feedback
                 traditional_feedback = generate_feedback(
                     problem["parsonsSettings"],
-                    request.userSolution
+                    request.userSolution,
+                    request.solutionContext
                 )
                 
                 # Validate solution
                 validation_result = validate_solution(
                     problem["parsonsSettings"],
-                    request.userSolution
+                    request.userSolution,
+                    request.solutionContext
                 )
                 
                 solution_validation = SolutionValidation(

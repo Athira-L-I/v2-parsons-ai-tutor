@@ -40,6 +40,7 @@ class SourceCodeUpload(BaseModel):
 class SolutionSubmission(BaseModel):
     problemId: str
     solution: List[str]
+    solutionContext: Optional[Dict[str, Any]] = None
 
 class SolutionValidation(BaseModel):
     isCorrect: bool
@@ -48,6 +49,7 @@ class SolutionValidation(BaseModel):
 class FeedbackRequest(BaseModel):
     problemId: str
     userSolution: List[str]
+    solutionContext: Optional[Dict[str, Any]] = None
 
 class FeedbackResponse(BaseModel):
     feedback: str
