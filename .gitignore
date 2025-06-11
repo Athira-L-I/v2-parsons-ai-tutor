@@ -69,3 +69,6 @@ debug_*.py
 
 # log files
 *.log
+
+# bat files
+*.bat

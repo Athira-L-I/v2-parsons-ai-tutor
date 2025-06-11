@@ -164,24 +164,22 @@ export const ParsonsProvider = ({ children }: ParsonsProviderProps) => {
       return newAttempts;
     });
   }, []);
-
   // Update adaptive state after an attempt
   const updateAdaptiveStateAfterAttempt = useCallback(
     (isCorrect: boolean) => {
       console.log(`📊 Updating adaptive state - isCorrect: ${isCorrect}`);
 
-      const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
-        adaptiveState,
-        isCorrect
-      );
+      setAdaptiveState((currentState) => {
+        const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
+          currentState,
+          isCorrect
+        );
 
-      setAdaptiveState(newAdaptiveState);
-
-      console.log('📊 New adaptive state:', newAdaptiveState);
-
-      return newAdaptiveState;
+        console.log('📊 New adaptive state:', newAdaptiveState);
+        return newAdaptiveState;
+      });
     },
-    [adaptiveState]
+    [] // Remove adaptiveState dependency to avoid stale closures
   );
 
   // Check if adaptation can be triggered

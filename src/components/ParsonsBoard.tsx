@@ -240,44 +240,67 @@ const ParsonsBoard: React.FC = () => {
     handleDropToSortable,
     handleDropToTrash,
   } = useDragAndDrop({ sortableBlocks, trashBlocks }, updateBlocks);
-
-  // ✅ Block initialization (simplified)
+  // ✅ Block initialization with adaptive features support
   useEffect(() => {
     if (!currentProblem) return;
 
-    const hasBlocks = sortableBlocks.length > 0 || trashBlocks.length > 0;
-    if (hasBlocks) return;
-
+    // Always re-initialize when currentProblem changes to support adaptive features
     const lines = currentProblem.initial
       .split('\n')
       .filter((line) => line.trim());
+    
+    console.log('🔄 Initializing blocks from problem:', {
+      totalLines: lines.length,
+      combinedLines: lines.filter(line => line.includes('\\n')).length,
+      distractorLines: lines.filter(line => line.includes('#distractor')).length
+    });
+
     const initialBlocks = lines.map((line, index) => {
       const isDistractor = line.includes('#distractor');
       const isPaired = line.includes('#paired');
       const cleanLine =
         isDistractor || isPaired
-          ? line.replace(/#(distractor|paired)\s*$/, '')
-          : line;
+          ? line.replace(/#(distractor|paired)\s*$/, '').trim()
+          : line.trim();
 
+      // Check for combined blocks (lines with \\n separator)
       const isCombined = cleanLine.includes('\\n');
       let subLines: string[] | undefined;
-      let displayText = cleanLine.trimStart();
+      let displayText = cleanLine;
       let correctIndentation = 0;
 
-      if (isCombined) {
+      if (isCombined) {        // Split combined blocks and preserve original indentation
         subLines = cleanLine.split('\\n').map((subLine) => {
-          const match = subLine.match(/^(\s*)(.*)/);
-          return match ? match[0] : subLine;
-        });
+          // Keep the original formatting including leading whitespace
+          const trimmedSubLine = subLine.trim();
+          if (trimmedSubLine) {
+            // Extract indentation from the original line if it exists
+            const originalIndent = subLine.match(/^(\s*)/)?.[1] || '';
+            return originalIndent + trimmedSubLine;
+          }
+          return subLine;
+        }).filter(subLine => subLine.trim()); // Remove empty lines
+
         displayText = `${subLines.length} combined lines`;
+        
+        // Use the indentation from the first non-empty subline
+        const firstSubLine = subLines[0] || '';
         correctIndentation = Math.floor(
-          (subLines[0].match(/^(\s*)/)?.[1].length || 0) / 4
+          (firstSubLine.match(/^(\s*)/)?.[1].length || 0) / 4
         );
+        
+        console.log('📦 Created combined block:', {
+          id: `block-${index}`,
+          subLines: subLines.length,
+          firstLine: subLines[0]?.substring(0, 30) + '...',
+          indentation: correctIndentation
+        });
       } else {
+        // Regular single line block
         correctIndentation = Math.floor(
           (line.match(/^(\s*)/)?.[1].length || 0) / 4
         );
-        displayText = cleanLine.trim();
+        displayText = cleanLine;
       }
 
       return {
@@ -289,16 +312,22 @@ const ParsonsBoard: React.FC = () => {
         isCombined,
         subLines,
       };
-    });
+    });    const shuffledBlocks = [...initialBlocks].sort(() => Math.random() - 0.5);
 
-    const shuffledBlocks = [...initialBlocks].sort(() => Math.random() - 0.5);
+    console.log('🎲 Shuffled blocks created:', {
+      total: shuffledBlocks.length,
+      combined: shuffledBlocks.filter(b => b.isCombined).length,
+      distractors: shuffledBlocks.filter(b => b.isDistractor).length
+    });
 
     if (currentProblem.options.trashId) {
       updateBlocks([], shuffledBlocks);
     } else {
       updateBlocks(shuffledBlocks, []);
     }
-  }, [currentProblem, sortableBlocks.length, trashBlocks.length, updateBlocks]);
+    
+    console.log('✅ Block initialization complete');
+  }, [currentProblem, updateBlocks]); // Removed length dependencies to ensure re-initialization
 
   // ✅ Handle indentation mode changes
   useEffect(() => {

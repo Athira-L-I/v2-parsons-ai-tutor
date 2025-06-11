@@ -9,11 +9,13 @@ interface AdaptiveFeaturesToggleProps {
 
 const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
   className = '',
-}) => {
-  const {
+}) => {  const {
     currentProblem: settings,
+    setCurrentProblem,
     adaptiveState,
+    setAdaptiveState,
     adaptationMessage,
+    setAdaptationMessage,
     canTriggerAdaptation,
     getAdaptationSuggestions,
   } = useParsonsContext();
@@ -26,7 +28,6 @@ const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
 
   // Use the canTriggerAdaptation from context
   const canTriggerAdaptationNow = canTriggerAdaptation();
-
   const handleApplyAdaptation = () => {
     if (!settings) return;
 
@@ -38,10 +39,24 @@ const AdaptiveFeaturesToggle: React.FC<AdaptiveFeaturesToggleProps> = ({
 
       if (result.success) {
         console.log('Adaptive features applied:', result);
-        // The context will handle the state updates
+        
+        // Update both the problem settings and adaptive state in the context
+        setCurrentProblem(result.newSettings);
+        setAdaptiveState(result.newState);
+        setAdaptationMessage(result.message);
+        
+        // Clear the message after 5 seconds
+        setTimeout(() => setAdaptationMessage(null), 5000);
+      } else {
+        console.log('No adaptive features applied:', result.message);
+        setAdaptationMessage(result.message);
+        setTimeout(() => setAdaptationMessage(null), 3000);
       }
     } catch (error) {
       console.error('Error applying adaptive features:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setAdaptationMessage(`Error: ${errorMessage}`);
+      setTimeout(() => setAdaptationMessage(null), 5000);
     }
   };
 

@@ -199,7 +199,7 @@ function isControlStructure(line: string): boolean {
 export function removeDistractors(
   settings: ParsonsSettings,
   maxToRemove: number = 2
-): BlockCombineResult {
+): DistractorRemovalResult {
   const lines = settings.initial.split('\n').filter((line) => line.trim());
 
   const distractorLines = lines.filter((line) => line.includes('#distractor'));
@@ -209,7 +209,7 @@ export function removeDistractors(
     return {
       success: false,
       newSettings: settings,
-      combinedBlocks: 0,
+      removedDistractors: 0,
       message: 'No distractors available to remove',
     };
   }
@@ -231,7 +231,7 @@ export function removeDistractors(
   return {
     success: true,
     newSettings,
-    combinedBlocks: numToRemove,
+    removedDistractors: numToRemove,
     message: `Removed ${numToRemove} distractor block(s) to simplify the problem`,
   };
 }
@@ -591,7 +591,6 @@ export function validatePythonIndentation(lines: string[]): {
   errors: string[];
 } {
   const errors: string[] = [];
-  let expectedIndent = 0;
   const indentStack: number[] = [0];
 
   lines.forEach((line, index) => {
@@ -601,7 +600,6 @@ export function validatePythonIndentation(lines: string[]): {
 
     // Check for lines that should increase indentation
     if (trimmedLine.endsWith(':')) {
-      expectedIndent = currentIndent + 1;
       indentStack.push(currentIndent);
     }
     // Check for lines that should decrease indentation
