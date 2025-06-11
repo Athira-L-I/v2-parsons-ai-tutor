@@ -36,7 +36,7 @@
       "generated"
     ],
     "parsonsSettings": {
-      "initial": "start = 1, end = 10\nfor i in range(start, end + 1):\n    if i % 2 == 0:\n        print(i)",
+      "initial": "start = 1\nend = 10\nfor i in range(start, end + 1):\n    if i % 2 == 0:\n        print(i)",
       "options": {
         "sortableId": "sortable",
         "trashId": "sortableTrash",
