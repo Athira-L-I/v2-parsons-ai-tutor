@@ -25,25 +25,32 @@ def validate_solution(problem_settings: Dict[str, Any], user_solution: List[str]
         if '#distractor' in line:
             continue
         
-        # Add this line to the correct solution
-        correct_lines.append(line.strip())
+        # Add this line to the correct solution (PRESERVE INDENTATION)
+        correct_lines.append(line)  # Don't strip here
     
-    # Clean user solution lines
-    cleaned_user_solution = [line.strip() for line in user_solution if line.strip()]
+    # Clean user solution lines (PRESERVE INDENTATION)
+    cleaned_user_solution = [line for line in user_solution if line.strip()]
     
     # Compare the solutions
     is_correct = (len(cleaned_user_solution) == len(correct_lines))
     
     if is_correct:
-        # Check each line
+        # Check each line for both content AND indentation
         for i, (user_line, correct_line) in enumerate(zip(cleaned_user_solution, correct_lines)):
-            # Normalize whitespace and compare
+            # Check content first
             if user_line.strip() != correct_line.strip():
+                is_correct = False
+                break
+            
+            # Check indentation
+            user_indent = len(user_line) - len(user_line.lstrip())
+            correct_indent = len(correct_line) - len(correct_line.lstrip())
+            if user_indent != correct_indent:
                 is_correct = False
                 break
     
     # Return the validation result
     return {
         "isCorrect": is_correct,
-        "details": "Solution is correct!" if is_correct else "Solution does not match the expected output."
+        "details": "Solution is correct!" if is_correct else "Solution does not match the expected output or has incorrect indentation."
     }

@@ -164,12 +164,12 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
+          {/*currentSolution.map((block, index) => (
+
           <p className="text-sm text-gray-600 mb-3">
             Use the buttons below to adjust the indentation of each block in
             your solution:
           </p>
-
-          {currentSolution.map((block, index) => (
             <div
               key={block.id}
               className="flex items-center justify-between p-3 bg-gray-50 rounded border"
@@ -247,7 +247,7 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
                 </div>
               </div>
             </div>
-          ))}
+          ))*/}
 
           {/* Show current indentation issues even in manual mode */}
           {hints.length > 0 && (
@@ -287,31 +287,6 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
               </div>
             </div>
           )}
-
-          {/* Manual mode tips */}
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-            <h4 className="font-medium text-blue-800 mb-2">
-              💡 Manual Indentation Tips:
-            </h4>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>
-                • Adjust the "Base Indent" to move entire blocks (including all
-                sublines)
-              </li>
-              <li>
-                • Combined blocks maintain relative indentation between their
-                sublines
-              </li>
-              <li>
-                • Code inside functions, if statements, and loops should be
-                indented
-              </li>
-              <li>
-                • Use consistent indentation levels (typically 1 level = 4
-                spaces)
-              </li>
-            </ul>
-          </div>
         </div>
       )}
     </div>
