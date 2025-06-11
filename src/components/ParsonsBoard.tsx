@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { ParsonsSettings } from '@/@types/types';
 import CombinedBlock from './CombinedBlock';
 
-// Dynamically import IndentationControls to avoid SSR issues
 const IndentationControls = dynamic(() => import('./IndentationControls'), {
   ssr: false,
 });
@@ -20,32 +20,233 @@ interface BlockItem {
   subLines?: string[];
 }
 
-const ParsonsBoard: React.FC = () => {
-  const {
-    currentProblem,
-    userSolution,
-    setUserSolution,
-    isCorrect,
-    setCurrentBlocks, // Add this
-  } = useParsonsContext();
+// ✅ Custom hook to extract solution generation logic
+const useSolutionGeneration = () => {
+  const generateSolutionFromBlocks = useCallback((blocks: BlockItem[]) => {
+    return blocks.map((block) => {
+      const indent = '    '.repeat(block.indentation);
 
+      if (block.isCombined && block.subLines) {
+        return block.subLines
+          .map((subLine) => {
+            const hasIndent = /^\s+/.test(subLine);
+            return hasIndent ? subLine : indent + subLine.trim();
+          })
+          .join('\n');
+      } else {
+        return `${indent}${block.text}`;
+      }
+    });
+  }, []);
+
+  return { generateSolutionFromBlocks };
+};
+
+// ✅ Custom hook for block management
+const useBlockManagement = (
+  currentProblem: ParsonsSettings | null,
+  setUserSolution: (solution: string[]) => void,
+  setCurrentBlocks?: (blocks: BlockItem[]) => void
+) => {
   const [sortableBlocks, setSortableBlocks] = useState<BlockItem[]>([]);
   const [trashBlocks, setTrashBlocks] = useState<BlockItem[]>([]);
+  const { generateSolutionFromBlocks } = useSolutionGeneration();
+
+  const updateSolution = useCallback(
+    (blocks: BlockItem[]) => {
+      const solution = generateSolutionFromBlocks(blocks);
+      setUserSolution(solution);
+
+      if (setCurrentBlocks) {
+        setCurrentBlocks(blocks);
+      }
+    },
+    [generateSolutionFromBlocks, setUserSolution, setCurrentBlocks]
+  );
+
+  const updateBlocks = useCallback(
+    (newSortableBlocks: BlockItem[], newTrashBlocks?: BlockItem[]) => {
+      setSortableBlocks(newSortableBlocks);
+      if (newTrashBlocks !== undefined) {
+        setTrashBlocks(newTrashBlocks);
+      }
+      updateSolution(newSortableBlocks);
+    },
+    [updateSolution]
+  );
+
+  // ✅ Fixed circular dependency
+  const changeIndentation = useCallback(
+    (blockId: string, newIndent: number) => {
+      if (!currentProblem?.options.can_indent) return;
+
+      setSortableBlocks((prevBlocks) => {
+        const updatedBlocks = prevBlocks.map((block) =>
+          block.id === blockId ? { ...block, indentation: newIndent } : block
+        );
+
+        // Update solution immediately with the new blocks
+        updateSolution(updatedBlocks);
+        return updatedBlocks;
+      });
+    },
+    [currentProblem?.options.can_indent, updateSolution]
+  );
+
+  return {
+    sortableBlocks,
+    trashBlocks,
+    setSortableBlocks,
+    setTrashBlocks,
+    updateBlocks,
+    updateSolution,
+    changeIndentation,
+  };
+};
+
+// ✅ Custom hook for drag and drop
+const useDragAndDrop = (
+  blocks: { sortableBlocks: BlockItem[]; trashBlocks: BlockItem[] },
+  updateBlocks: (sortableBlocks: BlockItem[], trashBlocks?: BlockItem[]) => void
+) => {
   const [draggedItem, setDraggedItem] = useState<BlockItem | null>(null);
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
 
-  // Initialize blocks from the current problem (only when problem changes, not settings)
+  const handleDragStart = useCallback(
+    (
+      e: React.DragEvent,
+      area: 'sortable' | 'trash',
+      block: BlockItem,
+      index: number
+    ) => {
+      console.log('Drag start:', block.id, 'from', area);
+
+      const dragData = { area, block, index };
+      e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
+      e.dataTransfer.effectAllowed = 'move';
+
+      setDraggedItem(block);
+      setDraggedBlockId(block.id);
+    },
+    []
+  );
+
+  const handleDragEnd = useCallback(() => {
+    console.log('Drag end');
+    setDraggedItem(null);
+    setDraggedBlockId(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDropToSortable = useCallback(
+    (e: React.DragEvent, dropIndex?: number) => {
+      e.preventDefault();
+      console.log('Drop to sortable at index:', dropIndex);
+
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+
+        if (data.area === 'trash') {
+          const newTrashBlocks = [...blocks.trashBlocks];
+          const [draggedBlock] = newTrashBlocks.splice(data.index, 1);
+
+          const newSortableBlocks = [...blocks.sortableBlocks];
+          const insertIndex = dropIndex ?? newSortableBlocks.length;
+          newSortableBlocks.splice(insertIndex, 0, draggedBlock);
+
+          updateBlocks(newSortableBlocks, newTrashBlocks);
+        } else if (data.area === 'sortable' && dropIndex !== undefined) {
+          const newSortableBlocks = [...blocks.sortableBlocks];
+          const [draggedBlock] = newSortableBlocks.splice(data.index, 1);
+          newSortableBlocks.splice(dropIndex, 0, draggedBlock);
+
+          updateBlocks(newSortableBlocks);
+        }
+      } catch (error) {
+        console.error('Error handling drop:', error);
+      } finally {
+        handleDragEnd();
+      }
+    },
+    [blocks, updateBlocks, handleDragEnd]
+  );
+
+  const handleDropToTrash = useCallback(
+    (e: React.DragEvent, dropIndex?: number) => {
+      e.preventDefault();
+      console.log('Drop to trash at index:', dropIndex);
+
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+
+        if (data.area === 'sortable') {
+          const newSortableBlocks = [...blocks.sortableBlocks];
+          const [draggedBlock] = newSortableBlocks.splice(data.index, 1);
+
+          const newTrashBlocks = [...blocks.trashBlocks];
+          const insertIndex = dropIndex ?? newTrashBlocks.length;
+          newTrashBlocks.splice(insertIndex, 0, draggedBlock);
+
+          updateBlocks(newSortableBlocks, newTrashBlocks);
+        } else if (data.area === 'trash' && dropIndex !== undefined) {
+          const newTrashBlocks = [...blocks.trashBlocks];
+          const [draggedBlock] = newTrashBlocks.splice(data.index, 1);
+          newTrashBlocks.splice(dropIndex, 0, draggedBlock);
+
+          updateBlocks(blocks.sortableBlocks, newTrashBlocks);
+        }
+      } catch (error) {
+        console.error('Error handling drop:', error);
+      } finally {
+        handleDragEnd();
+      }
+    },
+    [blocks, updateBlocks, handleDragEnd]
+  );
+
+  return {
+    draggedItem,
+    draggedBlockId,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDropToSortable,
+    handleDropToTrash,
+  };
+};
+
+const ParsonsBoard: React.FC = () => {
+  const { currentProblem, setUserSolution, isCorrect, setCurrentBlocks } =
+    useParsonsContext();
+  const {
+    sortableBlocks,
+    trashBlocks,
+    setSortableBlocks,
+    setTrashBlocks,
+    updateBlocks,
+    changeIndentation,
+  } = useBlockManagement(currentProblem, setUserSolution, setCurrentBlocks);
+
+  const {
+    draggedItem,
+    draggedBlockId,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDropToSortable,
+    handleDropToTrash,
+  } = useDragAndDrop({ sortableBlocks, trashBlocks }, updateBlocks);
+
+  // ✅ Block initialization (simplified)
   useEffect(() => {
     if (!currentProblem) return;
 
-    // Only reinitialize if we don't have blocks yet, or if the problem content actually changed
-    const currentProblemContent = currentProblem.initial;
     const hasBlocks = sortableBlocks.length > 0 || trashBlocks.length > 0;
-
-    // Skip reinitialization if we already have blocks and only settings changed
-    if (hasBlocks) {
-      return;
-    }
+    if (hasBlocks) return;
 
     const lines = currentProblem.initial
       .split('\n')
@@ -58,7 +259,6 @@ const ParsonsBoard: React.FC = () => {
           ? line.replace(/#(distractor|paired)\s*$/, '')
           : line;
 
-      // Check if this line contains combined blocks (\\n separator)
       const isCombined = cleanLine.includes('\\n');
       let subLines: string[] | undefined;
       let displayText = cleanLine.trimStart();
@@ -66,17 +266,14 @@ const ParsonsBoard: React.FC = () => {
 
       if (isCombined) {
         subLines = cleanLine.split('\\n').map((subLine) => {
-          // Preserve indentation in subLines
           const match = subLine.match(/^(\s*)(.*)/);
           return match ? match[0] : subLine;
         });
         displayText = `${subLines.length} combined lines`;
-        // Use the indentation of the first line in the combined block
         correctIndentation = Math.floor(
           (subLines[0].match(/^(\s*)/)?.[1].length || 0) / 4
         );
       } else {
-        // For single lines, get correct indentation
         correctIndentation = Math.floor(
           (line.match(/^(\s*)/)?.[1].length || 0) / 4
         );
@@ -86,7 +283,6 @@ const ParsonsBoard: React.FC = () => {
       return {
         id: `block-${index}`,
         text: displayText,
-        // When indentation is provided (can_indent: false), use correct indentation
         indentation:
           currentProblem.options.can_indent === false ? correctIndentation : 0,
         isDistractor: isDistractor || isPaired,
@@ -95,42 +291,35 @@ const ParsonsBoard: React.FC = () => {
       };
     });
 
-    // Shuffle only on the client
     const shuffledBlocks = [...initialBlocks].sort(() => Math.random() - 0.5);
 
     if (currentProblem.options.trashId) {
-      setSortableBlocks([]);
-      setTrashBlocks([...shuffledBlocks]);
+      updateBlocks([], shuffledBlocks);
     } else {
-      setSortableBlocks([...shuffledBlocks]);
-      setTrashBlocks([]);
+      updateBlocks(shuffledBlocks, []);
     }
-  }, [currentProblem?.initial, currentProblem?.options.trashId]); // Only depend on content and trash option
+  }, [currentProblem, sortableBlocks.length, trashBlocks.length, updateBlocks]);
 
-  // Handle indentation mode changes without resetting block positions
+  // ✅ Handle indentation mode changes
   useEffect(() => {
     if (!currentProblem) return;
 
     const isIndentationProvided = currentProblem.options.can_indent === false;
 
     if (isIndentationProvided) {
-      // Apply correct indentation to existing blocks when switching to provided mode
       const updateBlocksWithCorrectIndentation = (blocks: BlockItem[]) => {
         return blocks.map((block) => {
-          // Find the correct indentation for this block from the initial code
           const lines = currentProblem.initial
             .split('\n')
             .filter((line) => line.trim());
-
           let correctIndentation = 0;
-          // Find matching line in initial code to get correct indentation
+
           for (const line of lines) {
             const cleanLine = line
               .replace(/#(distractor|paired)\s*$/, '')
               .trim();
 
             if (block.isCombined && block.subLines) {
-              // For combined blocks, use first subline to determine indentation
               const firstSubLine = block.subLines[0]?.trim();
               if (cleanLine.includes(firstSubLine)) {
                 correctIndentation = Math.floor(
@@ -148,324 +337,94 @@ const ParsonsBoard: React.FC = () => {
             }
           }
 
-          return {
-            ...block,
-            indentation: correctIndentation,
-          };
+          return { ...block, indentation: correctIndentation };
         });
       };
 
       setSortableBlocks((prev) => updateBlocksWithCorrectIndentation(prev));
       setTrashBlocks((prev) => updateBlocksWithCorrectIndentation(prev));
     }
-    // Note: We don't reset to 0 when switching to manual mode to preserve user's work
-  }, [currentProblem?.options.can_indent]); // Only when indentation mode changes
+  }, [currentProblem, setSortableBlocks, setTrashBlocks]);
+  // ✅ Optimized drop handlers
+  const handleSortableDropHandler = useCallback(
+    (e: React.DragEvent, index?: number) => {
+      e.stopPropagation();
+      handleDropToSortable(e, index);
+    },
+    [handleDropToSortable]
+  );
 
-  // Update the solution in the context AND share block data
-  const updateSolution = (blocks: BlockItem[]) => {
-    const solution = blocks.map((block) => {
-      const indent = '    '.repeat(block.indentation);
+  const handleTrashDropHandler = useCallback(
+    (e: React.DragEvent, index?: number) => {
+      e.stopPropagation();
+      handleDropToTrash(e, index);
+    },
+    [handleDropToTrash]
+  );
 
-      if (block.isCombined && block.subLines) {
-        // For combined blocks, return all sub-lines with proper indentation
-        return block.subLines
-          .map((subLine) => {
-            // If subLine already has indentation, use it; otherwise add block indentation
-            const hasIndent = /^\s+/.test(subLine);
-            return hasIndent ? subLine : indent + subLine.trim();
-          })
-          .join('\n');
-      } else {
-        return `${indent}${block.text}`;
-      }
-    });
-
-    setUserSolution(solution);
-
-    // Share the block data with context for unified indentation logic
-    if (setCurrentBlocks) {
-      setCurrentBlocks(blocks);
-    }
-  };
-
-  // Handle indentation changes from IndentationControls
-  const changeIndentation = (blockId: string, newIndent: number) => {
-    if (!currentProblem?.options.can_indent) return;
-
-    const updateBlocks = (blocks: BlockItem[]) =>
-      blocks.map((block) =>
-        block.id === blockId ? { ...block, indentation: newIndent } : block
-      );
-
-    setSortableBlocks(updateBlocks);
-    updateSolution(updateBlocks(sortableBlocks));
-  };
-
-  // Handle applying indentation hints - CONSISTENT WITH IndentationControls
-  const handleApplyIndentationHint = (blockId: string, lineIndex: number) => {
-    if (!currentProblem) return;
-
-    // Build the same line-to-block mapping as IndentationControls
-    const lineToBlockMapping: Array<{
-      blockId: string;
-      subLineIndex?: number;
-    }> = [];
-
-    sortableBlocks.forEach((block) => {
-      if (block.isCombined && block.subLines) {
-        block.subLines.forEach((subLine, subIndex) => {
-          lineToBlockMapping.push({
-            blockId: block.id,
-            subLineIndex: subIndex,
-          });
-        });
-      } else {
-        lineToBlockMapping.push({
-          blockId: block.id,
-        });
-      }
-    });
-
-    // Generate current and expected lines for hint calculation
-    const currentLines: string[] = [];
-    const expectedLines: string[] = [];
-
-    const allCorrectLines = currentProblem.initial
-      .split('\n')
-      .filter((line) => line.trim() && !line.includes('#distractor'));
-
-    sortableBlocks.forEach((block) => {
-      if (block.isCombined && block.subLines) {
-        block.subLines.forEach((subLine) => {
-          const subLineRelativeIndent = Math.floor(
-            (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
-          );
-          const totalIndent = block.indentation + subLineRelativeIndent;
-          const indentString = '    '.repeat(totalIndent);
-          const cleanSubLine = subLine.trim();
-          currentLines.push(`${indentString}${cleanSubLine}`);
-
-          const matchingExpectedLine = allCorrectLines.find(
-            (expectedLine) => expectedLine.trim() === cleanSubLine
-          );
-          expectedLines.push(matchingExpectedLine || subLine);
-        });
-      } else {
-        const indentString = '    '.repeat(block.indentation);
-        currentLines.push(`${indentString}${block.text}`);
-
-        const matchingExpectedLine = allCorrectLines.find(
-          (expectedLine) => expectedLine.trim() === block.text.trim()
-        );
-        expectedLines.push(matchingExpectedLine || block.text);
-      }
-    });
-
-    const hints = generateIndentationHints(currentLines, expectedLines);
-
-    if (lineIndex >= lineToBlockMapping.length || lineIndex >= hints.length) {
-      console.warn('Line index out of bounds for hint application');
-      return;
-    }
-
-    const mapping = lineToBlockMapping[lineIndex];
-    const hint = hints[lineIndex];
-    const targetBlock = sortableBlocks.find((b) => b.id === mapping.blockId);
-
-    if (targetBlock?.isCombined && mapping.subLineIndex !== undefined) {
-      // For combined blocks, calculate the base indentation needed
-      const subLine = targetBlock.subLines?.[mapping.subLineIndex];
-      if (subLine) {
-        const subLineRelativeIndent = Math.floor(
-          (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
-        );
-        const newBlockIndent = Math.max(
-          0,
-          hint.expectedIndent - subLineRelativeIndent
-        );
-        changeIndentation(targetBlock.id, newBlockIndent);
-        console.log(
-          `Applied hint to combined block ${targetBlock.id}: base indent = ${newBlockIndent} for subLine ${mapping.subLineIndex}`
-        );
-      }
-    } else {
-      // For regular blocks, apply the indentation directly
-      changeIndentation(mapping.blockId, hint.expectedIndent);
-      console.log(
-        `Applied hint to regular block ${mapping.blockId}: indent = ${hint.expectedIndent}`
-      );
-    }
-  };
-
-  // Handle drag start - unified for both regular and combined blocks
-  const handleDragStart = (
-    e: React.DragEvent,
-    area: 'sortable' | 'trash',
-    block: BlockItem,
-    index: number
-  ) => {
-    console.log('Drag start:', block.id, 'from', area);
-
-    e.dataTransfer.setData(
-      'text/plain',
-      JSON.stringify({
-        area,
-        block,
-        index,
-      })
-    );
-
-    setDraggedItem(block);
-    setDraggedBlockId(block.id); // Set the dragged block ID
-
-    // Only add opacity class if this is not a combined block (they handle their own styling)
-    // if (!block.isCombined) {
-    //   e.currentTarget.classList.add('opacity-50');
-    // }
-  };
-
-  // Handle drag end - unified for both regular and combined blocks
-  const handleDragEnd = (e: React.DragEvent) => {
-    console.log('Drag end');
-    setDraggedItem(null);
-    setDraggedBlockId(null); // Clear the dragged block ID
-
-    // Only remove opacity class if this is not a combined block
-    // if (!e.currentTarget.classList.contains('opacity-50')) {
-    //   e.currentTarget.classList.remove('opacity-50');
-    // }
-  };
-
-  // Allow drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  // Handle drop in sortable area
-  const handleDropToSortable = (e: React.DragEvent, dropIndex?: number) => {
-    e.preventDefault();
-    console.log('Drop to sortable at index:', dropIndex);
-
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      console.log('Drop data:', data);
-
-      // If dropped from trash area
-      if (data.area === 'trash') {
-        const newTrashBlocks = [...trashBlocks];
-        const [draggedBlock] = newTrashBlocks.splice(data.index, 1);
-
-        const newSortableBlocks = [...sortableBlocks];
-        if (dropIndex !== undefined) {
-          newSortableBlocks.splice(dropIndex, 0, draggedBlock);
-        } else {
-          newSortableBlocks.push(draggedBlock);
+  // ✅ Optimized indentation handlers for blocks
+  const createIndentationHandlers = useCallback(
+    (blockId: string, currentIndentation: number) => ({
+      onIndentDecrease: () => {
+        if (currentIndentation > 0) {
+          changeIndentation(blockId, currentIndentation - 1);
         }
+      },
+      onIndentIncrease: () => {
+        changeIndentation(blockId, currentIndentation + 1);
+      },
+    }),
+    [changeIndentation]
+  );
 
-        setTrashBlocks(newTrashBlocks);
-        setSortableBlocks(newSortableBlocks);
-        updateSolution(newSortableBlocks);
-        setDraggedBlockId(null);
+  // ✅ Optimized combined block indentation handler
+  const createCombinedBlockIndentationHandler = useCallback(
+    (blockId: string, area: 'sortable' | 'trash') => {
+      if (area === 'sortable') {
+        return (idx: number, newIndent: number) =>
+          changeIndentation(blockId, newIndent);
       }
-      // If dropped within sortable area (reordering)
-      else if (data.area === 'sortable' && dropIndex !== undefined) {
-        const newSortableBlocks = [...sortableBlocks];
-        const [draggedBlock] = newSortableBlocks.splice(data.index, 1);
-        newSortableBlocks.splice(dropIndex, 0, draggedBlock);
+      return () => {};
+    },
+    [changeIndentation]
+  );
 
-        setSortableBlocks(newSortableBlocks);
-        updateSolution(newSortableBlocks);
+  // ✅ Memoized render functions
+  const renderBlock = useCallback(
+    (block: BlockItem, index: number, area: 'sortable' | 'trash') => {
+      if (block.isCombined && block.subLines) {
+        return (
+          <CombinedBlock
+            key={block.id}
+            id={block.id}
+            index={index}
+            lines={block.subLines}
+            indentation={block.indentation}
+            area={area}
+            moveBlock={() => {}} // Simplified since drag/drop handles this
+            changeIndentation={createCombinedBlockIndentationHandler(
+              block.id,
+              area
+            )}
+            canIndent={
+              currentProblem?.options.can_indent !== false &&
+              area === 'sortable'
+            }
+            indentSize={currentProblem?.options.x_indent || 50}
+            groupColor={block.groupColor}
+            groupId={block.groupId}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            isDragging={draggedBlockId === block.id}
+          />
+        );
       }
-    } catch (error) {
-      console.error('Error handling drop:', error);
-    }
-  };
 
-  // Handle drop in trash area
-  const handleDropToTrash = (e: React.DragEvent, dropIndex?: number) => {
-    e.preventDefault();
-    console.log('Drop to trash at index:', dropIndex);
-
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-
-      // If dropped from sortable area
-      if (data.area === 'sortable') {
-        const newSortableBlocks = [...sortableBlocks];
-        const [draggedBlock] = newSortableBlocks.splice(data.index, 1);
-
-        const newTrashBlocks = [...trashBlocks];
-        if (dropIndex !== undefined) {
-          newTrashBlocks.splice(dropIndex, 0, draggedBlock);
-        } else {
-          newTrashBlocks.push(draggedBlock);
-        }
-
-        setSortableBlocks(newSortableBlocks);
-        setTrashBlocks(newTrashBlocks);
-        updateSolution(newSortableBlocks);
-        setDraggedBlockId(null);
-      }
-      // If dropped within trash area (reordering)
-      else if (data.area === 'trash' && dropIndex !== undefined) {
-        const newTrashBlocks = [...trashBlocks];
-        const [draggedBlock] = newTrashBlocks.splice(data.index, 1);
-        newTrashBlocks.splice(dropIndex, 0, draggedBlock);
-
-        setTrashBlocks(newTrashBlocks);
-      }
-    } catch (error) {
-      console.error('Error handling drop:', error);
-    }
-  };
-
-  // Modified moveBlock function to handle combined blocks properly
-  const moveBlock = (
-    dragIndex: number,
-    hoverIndex: number,
-    sourceArea: 'sortable' | 'trash',
-    targetArea: 'sortable' | 'trash'
-  ) => {
-    console.log(
-      `Moving block from ${sourceArea}[${dragIndex}] to ${targetArea}[${hoverIndex}]`
-    );
-    // This will be handled by the drag/drop event handlers
-  };
-
-  // Render individual block (regular or combined)
-  const renderBlock = (
-    block: BlockItem,
-    index: number,
-    area: 'sortable' | 'trash'
-  ) => {
-    if (block.isCombined && block.subLines) {
-      return (
-        <CombinedBlock
-          key={block.id}
-          id={block.id}
-          index={index}
-          lines={block.subLines}
-          indentation={block.indentation}
-          area={area}
-          moveBlock={moveBlock}
-          changeIndentation={
-            area === 'sortable'
-              ? (idx, newIndent) => changeIndentation(block.id, newIndent)
-              : () => {}
-          }
-          canIndent={
-            currentProblem?.options.can_indent !== false && area === 'sortable'
-          }
-          indentSize={currentProblem?.options.x_indent || 50}
-          groupColor={block.groupColor}
-          groupId={block.groupId}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          isDragging={draggedBlockId === block.id} // <-- Pass isDragging prop
-        />
+      const indentationHandlers = createIndentationHandlers(
+        block.id,
+        block.indentation
       );
-    } else {
+
       return (
         <div
           key={block.id}
@@ -473,14 +432,11 @@ const ParsonsBoard: React.FC = () => {
           onDragStart={(e) => handleDragStart(e, area, block, index)}
           onDragEnd={handleDragEnd}
           onDragOver={handleDragOver}
-          onDrop={(e) => {
-            e.stopPropagation();
-            if (area === 'sortable') {
-              handleDropToSortable(e, index);
-            } else {
-              handleDropToTrash(e, index);
-            }
-          }}
+          onDrop={
+            area === 'sortable'
+              ? (e) => handleSortableDropHandler(e, index)
+              : (e) => handleTrashDropHandler(e, index)
+          }
           className={`flex items-center p-2 bg-white rounded shadow cursor-move border-2 transition-all duration-200 ${
             block.groupColor ? block.groupColor : 'border-gray-200'
           } hover:shadow-md ${draggedBlockId === block.id ? 'opacity-50' : ''}`}
@@ -491,17 +447,13 @@ const ParsonsBoard: React.FC = () => {
             paddingLeft: '8px',
           }}
         >
-          {/* Show manual indentation controls only when can_indent is true */}
+          {/* Indentation controls */}
           {currentProblem?.options.can_indent !== false &&
             area === 'sortable' && (
               <div className="flex space-x-1 mr-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (block.indentation > 0) {
-                      changeIndentation(block.id, block.indentation - 1);
-                    }
-                  }}
+                  onClick={indentationHandlers.onIndentDecrease}
                   disabled={block.indentation === 0}
                   className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     block.indentation === 0
@@ -513,9 +465,7 @@ const ParsonsBoard: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    changeIndentation(block.id, block.indentation + 1)
-                  }
+                  onClick={indentationHandlers.onIndentIncrease}
                   className="px-2 py-0.5 text-xs bg-gray-300 hover:bg-gray-400 rounded transition-colors"
                 >
                   →
@@ -523,7 +473,7 @@ const ParsonsBoard: React.FC = () => {
               </div>
             )}
 
-          {/* Indentation indicator when indentation is provided */}
+          {/* Indentation indicator */}
           {currentProblem?.options.can_indent === false &&
             block.indentation > 0 &&
             area === 'sortable' && (
@@ -536,7 +486,6 @@ const ParsonsBoard: React.FC = () => {
 
           <pre className="font-mono text-sm flex-1">{block.text}</pre>
 
-          {/* Show indentation level for debugging */}
           {area === 'sortable' && (
             <span className="text-xs text-gray-400 ml-2">
               [{block.indentation}]
@@ -550,56 +499,69 @@ const ParsonsBoard: React.FC = () => {
           )}
         </div>
       );
-    }
-  };
+    },
+    [
+      currentProblem,
+      draggedBlockId,
+      handleDragStart,
+      handleDragEnd,
+      handleDragOver,
+      handleSortableDropHandler,
+      handleTrashDropHandler,
+      createIndentationHandlers,
+      createCombinedBlockIndentationHandler,
+    ]
+  );
+  // ✅ Optimized empty drop zone handlers
+  const handleEmptyDropZoneHandler = useCallback(
+    (area: 'sortable' | 'trash') => (e: React.DragEvent) => {
+      if (area === 'sortable') {
+        handleDropToSortable(e);
+      } else {
+        handleDropToTrash(e);
+      }
+    },
+    [handleDropToSortable, handleDropToTrash]
+  );
 
-  // Enhanced drop zone component with better visual feedback
-  const renderDropZone = (area: 'sortable' | 'trash', blocks: BlockItem[]) => {
-    const isDropZoneActive = draggedItem !== null;
+  const renderDropZone = useCallback(
+    (area: 'sortable' | 'trash', blocks: BlockItem[]) => {
+      const isDropZoneActive = draggedItem !== null;
+      const emptyDropHandler = handleEmptyDropZoneHandler(area);
 
-    return (
-      <div
-        className={`space-y-2 min-h-32 transition-all duration-200 ${
-          isDropZoneActive ? 'bg-blue-50 border-blue-200' : ''
-        }`}
-        onDragOver={handleDragOver}
-        onDrop={(e) => {
-          if (area === 'sortable') {
-            handleDropToSortable(e);
-          } else {
-            handleDropToTrash(e);
-          }
-        }}
-      >
-        {blocks.map((block, index) => renderBlock(block, index, area))}
-        {blocks.length === 0 && (
-          <div
-            className={`p-4 text-gray-500 border-2 border-dashed rounded h-32 flex items-center justify-center transition-all duration-200 ${
-              isDropZoneActive
-                ? 'border-blue-400 bg-blue-50 text-blue-600'
-                : 'border-gray-300'
-            }`}
-            onDragOver={handleDragOver}
-            onDrop={(e) => {
-              if (area === 'sortable') {
-                handleDropToSortable(e);
-              } else {
-                handleDropToTrash(e);
-              }
-            }}
-          >
-            {isDropZoneActive
-              ? `Drop ${
-                  draggedItem?.isCombined ? 'combined block' : 'block'
-                } here`
-              : area === 'sortable'
-              ? 'Drag code blocks here to build your solution'
-              : 'Drop blocks here'}
-          </div>
-        )}
-      </div>
-    );
-  };
+      return (
+        <div
+          className={`space-y-2 min-h-32 transition-all duration-200 ${
+            isDropZoneActive ? 'bg-blue-50 border-blue-200' : ''
+          }`}
+          onDragOver={handleDragOver}
+          onDrop={emptyDropHandler}
+        >
+          {blocks.map((block, index) => renderBlock(block, index, area))}
+          {blocks.length === 0 && (
+            <div
+              className={`p-4 text-gray-500 border-2 border-dashed rounded h-32 flex items-center justify-center transition-all duration-200 ${
+                isDropZoneActive
+                  ? 'border-blue-400 bg-blue-50 text-blue-600'
+                  : 'border-gray-300'
+              }`}
+              onDragOver={handleDragOver}
+              onDrop={emptyDropHandler}
+            >
+              {isDropZoneActive
+                ? `Drop ${
+                    draggedItem?.isCombined ? 'combined block' : 'block'
+                  } here`
+                : area === 'sortable'
+                ? 'Drag code blocks here to build your solution'
+                : 'Drop blocks here'}
+            </div>
+          )}
+        </div>
+      );
+    },
+    [draggedItem, handleDragOver, handleEmptyDropZoneHandler, renderBlock]
+  );
 
   return (
     <div className="space-y-4">
@@ -645,17 +607,10 @@ const ParsonsBoard: React.FC = () => {
           </h3>
           {renderDropZone('sortable', sortableBlocks)}
         </div>
-      </div>
-
+      </div>{' '}
       {/* Integrated IndentationControls */}
       {currentProblem && sortableBlocks.length > 0 && (
-        <IndentationControls
-          settings={currentProblem}
-          currentSolution={sortableBlocks}
-          onChangeIndentation={changeIndentation}
-          onApplyHint={handleApplyIndentationHint}
-          className="mt-4"
-        />
+        <IndentationControls className="mt-4" />
       )}
     </div>
   );
