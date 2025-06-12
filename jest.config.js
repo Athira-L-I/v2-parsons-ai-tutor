@@ -6,7 +6,9 @@ module.exports = {
     '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
     '^@/contexts/(.*)$': '<rootDir>/src/contexts/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
-  },
+  },  transformIgnorePatterns: [
+    'node_modules/(?!(react-dnd|react-dnd-html5-backend|dnd-core|@react-dnd|invariant|@dnd-kit)/)'
+  ],
   transform: {
     '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { 
       presets: [

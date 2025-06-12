@@ -37,8 +37,7 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
       .split('\n')
       .filter((line) => line.trim() && !line.includes('#distractor'));
 
-    currentSolution.forEach((block) => {
-      if (block.isCombined && block.subLines) {
+    currentSolution.forEach((block) => {      if (block.isCombined && block.subLines) {
         block.subLines.forEach((subLine, subIndex) => {
           const subLineRelativeIndent = Math.floor(
             (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
@@ -48,10 +47,20 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
           const cleanSubLine = subLine.trim();
           currentLines.push(`${indentString}${cleanSubLine}`);
 
+          // For combined blocks, preserve the original indentation from the correct solution
           const matchingExpectedLine = allCorrectLines.find(
             (expectedLine) => expectedLine.trim() === cleanSubLine
           );
-          expectedLines.push(matchingExpectedLine || subLine);
+          
+          if (matchingExpectedLine) {
+            // Use the original indented line from the correct solution
+            expectedLines.push(matchingExpectedLine);
+          } else {
+            // Fallback: preserve the original subLine structure if it has indentation
+            const originalIndent = subLine.match(/^(\s*)/)?.[1] || '';
+            const fallbackLine = originalIndent ? subLine : `${indentString}${cleanSubLine}`;
+            expectedLines.push(fallbackLine);
+          }
 
           lineToBlockMapping.push({
             blockId: block.id,
@@ -65,7 +74,7 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
         const matchingExpectedLine = allCorrectLines.find(
           (expectedLine) => expectedLine.trim() === block.text.trim()
         );
-        expectedLines.push(matchingExpectedLine || block.text);
+        expectedLines.push(matchingExpectedLine || `${indentString}${block.text}`);
 
         lineToBlockMapping.push({
           blockId: block.id,

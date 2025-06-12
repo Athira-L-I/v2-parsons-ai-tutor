@@ -52,9 +52,7 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
         .filter((line: string) => line.trim() && !line.includes('#distractor'));
 
       const currentLines: string[] = [];
-      const expectedLines: string[] = [];
-
-      currentBlocks.forEach((block: any) => {
+      const expectedLines: string[] = [];      currentBlocks.forEach((block: any) => {
         if (block.isCombined && block.subLines) {
           block.subLines.forEach((subLine: string) => {
             const subLineRelativeIndent = Math.floor(
@@ -65,10 +63,21 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
             const cleanSubLine = subLine.trim();
             currentLines.push(`${indentString}${cleanSubLine}`);
 
+            // For combined blocks, find the matching expected line and preserve its indentation
             const matchingExpectedLine = allCorrectLines.find(
               (expectedLine: string) => expectedLine.trim() === cleanSubLine
             );
-            expectedLines.push(matchingExpectedLine || subLine);
+            
+            if (matchingExpectedLine) {
+              // Use the original indented line from the correct solution
+              expectedLines.push(matchingExpectedLine);
+            } else {
+              // Fallback: create properly indented line based on the original subLine structure
+              // If the subLine already has indentation, preserve it; otherwise use the current structure
+              const originalIndent = subLine.match(/^(\s*)/)?.[1] || '';
+              const fallbackLine = originalIndent ? subLine : `${indentString}${cleanSubLine}`;
+              expectedLines.push(fallbackLine);
+            }
           });
         } else {
           const indentString = '    '.repeat(block.indentation);
@@ -77,7 +86,7 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
           const matchingExpectedLine = allCorrectLines.find(
             (expectedLine: string) => expectedLine.trim() === block.text.trim()
           );
-          expectedLines.push(matchingExpectedLine || block.text);
+          expectedLines.push(matchingExpectedLine || `${indentString}${block.text}`);
         }
       });
 

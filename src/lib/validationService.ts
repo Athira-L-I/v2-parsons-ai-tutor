@@ -50,9 +50,7 @@ export class ValidationService {
   ): { isCorrect: boolean; details: string } {
     // Extract the correct solution lines from the problem settings
     const initialCode = settings.initial;
-    const correctLines: string[] = [];
-
-    // Process each line in the initial code, handling combined blocks
+    const correctLines: string[] = [];    // Process each line in the initial code, handling combined blocks
     for (const line of initialCode.split('\n')) {
       // Skip empty lines
       if (!line.trim()) continue;
@@ -65,12 +63,19 @@ export class ValidationService {
         const combinedLines = line.split('\\n');
         for (const combinedLine of combinedLines) {
           if (combinedLine.trim()) {
-            correctLines.push(combinedLine.trim());
+            // Remove #paired or #distractor comments from combined lines
+            const cleanLine = combinedLine.replace(/#(paired|distractor)\s*$/, '').trim();
+            if (cleanLine) {
+              correctLines.push(cleanLine);
+            }
           }
         }
       } else {
-        // Add this line to the correct solution
-        correctLines.push(line.trim());
+        // Remove #paired comments from regular lines and add to correct solution
+        const cleanLine = line.replace(/#(paired|distractor)\s*$/, '').trim();
+        if (cleanLine) {
+          correctLines.push(cleanLine);
+        }
       }
     }
 
