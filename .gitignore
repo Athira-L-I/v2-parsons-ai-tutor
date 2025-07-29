@@ -72,3 +72,9 @@ debug_*.py
 
 # bat files
 *.bat
+
+# virtual environment files
+venv/
+.env
+__pycache__/
+*.pyc
