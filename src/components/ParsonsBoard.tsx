@@ -18,14 +18,26 @@ const ParsonsBoard: React.FC = () => {
   const { currentProblem, setUserSolution, isCorrect, setCurrentBlocks } =
     useParsonsContext();
     
+  // Track last solution to prevent redundant updates
+  const lastSolutionUpdateRef = React.useRef<string>('');
+  
   // Use the new clean hook with proper dependencies
   const { sortableBlocks, trashBlocks, actions } = useParsonsBlocks(
     // Clean callback - only update solution
     useCallback((solution: string[], blocks: BlockItem[]) => {
-      setUserSolution(solution);
-      // Update currentBlocks immediately with the blocks that were passed from the hook
-      if (setCurrentBlocks) {
-        setCurrentBlocks(blocks);
+      // Create signature of the current solution
+      const solutionSignature = JSON.stringify(solution);
+      
+      // Only update if the solution has changed
+      if (solutionSignature !== lastSolutionUpdateRef.current) {
+        lastSolutionUpdateRef.current = solutionSignature;
+        console.log('💾 Updating solution with', solution.length, 'lines');
+        setUserSolution(solution);
+        
+        // Update currentBlocks immediately with the blocks that were passed from the hook
+        if (setCurrentBlocks) {
+          setCurrentBlocks(blocks);
+        }
       }
     }, [setUserSolution, setCurrentBlocks])
   );
@@ -33,6 +45,10 @@ const ParsonsBoard: React.FC = () => {
   // State for drag and drop
   const [draggedItem, setDraggedItem] = React.useState<BlockItem | null>(null);
   const [draggedBlockId, setDraggedBlockId] = React.useState<string | null>(null);
+  
+  // Add refs to track the last state to prevent infinite updates
+  const lastInitializedProblemRef = React.useRef<string>('');
+  const indentationUpdateRef = React.useRef<string>('');
   
   // Clean drag and drop handlers
   const handleDragStart = useCallback(
@@ -96,6 +112,19 @@ const ParsonsBoard: React.FC = () => {
   useEffect(() => {
     if (!currentProblem) return;
 
+    // Generate a unique identifier for the current problem state
+    // This includes the initial content and options to detect when the problem actually changes
+    const problemSignature = JSON.stringify({
+      initial: currentProblem.initial,
+      options: currentProblem.options
+    });
+    
+    // If this is the same problem we already initialized, skip re-initialization
+    if (problemSignature === lastInitializedProblemRef.current && sortableBlocks.length > 0) {
+      console.log('🔄 Skipping block re-initialization - problem signature has not changed');
+      return;
+    }
+    
     // Check if we actually need to re-initialize blocks
     const hasBlocks = sortableBlocks.length > 0 || trashBlocks.length > 0;
     
@@ -110,7 +139,7 @@ const ParsonsBoard: React.FC = () => {
     const currentBlockCount = sortableBlocks.length + trashBlocks.length;
     
     // Skip re-initialization if blocks already exist and count matches expected
-    if (hasBlocks && currentBlockCount === expectedBlockCount) {
+    if (hasBlocks && currentBlockCount === expectedBlockCount && problemSignature === lastInitializedProblemRef.current) {
       console.log('🔄 Skipping block re-initialization - blocks already exist and count matches');
       return;
     }
@@ -197,16 +226,38 @@ const ParsonsBoard: React.FC = () => {
       actions.setInitialBlocks(shuffledBlocks, []);
     }
     
+    // Update the reference to this problem signature to prevent future re-initializations
+    lastInitializedProblemRef.current = JSON.stringify({
+      initial: currentProblem.initial,
+      options: currentProblem.options
+    });
+    
     console.log('✅ Block initialization complete');
   }, [currentProblem, actions, sortableBlocks.length, trashBlocks.length]); // Added block lengths to dependencies
 
   // ✅ Handle indentation mode changes
   useEffect(() => {
     if (!currentProblem) return;
-
+    
+    // Generate a unique signature for the current state
+    const indentationSignature = JSON.stringify({
+      initialContent: currentProblem.initial,
+      indentationMode: currentProblem.options.can_indent,
+      sortableBlocksCount: sortableBlocks.length,
+      trashBlocksCount: trashBlocks.length
+    });
+    
+    // Skip if we've already processed this exact state
+    if (indentationSignature === indentationUpdateRef.current) {
+      console.log('🔄 Skipping indentation update - state has not changed');
+      return;
+    }
+    
     const isIndentationProvided = currentProblem.options.can_indent === false;
 
     if (isIndentationProvided) {
+      console.log('🔧 Updating indentation based on problem settings');
+      
       const updateBlocksWithCorrectIndentation = (blocks: BlockItem[]) => {
         return blocks.map((block) => {
           const lines = currentProblem.initial
@@ -247,6 +298,10 @@ const ParsonsBoard: React.FC = () => {
       
       // Use the actions from our reducer to update the blocks
       actions.updateBlocks(updatedSortableBlocks, updatedTrashBlocks);
+      
+      // Store the signature to prevent duplicate updates
+      indentationUpdateRef.current = indentationSignature;
+      console.log('✅ Indentation update complete');
     }
   }, [currentProblem, sortableBlocks, trashBlocks, actions]);
   // ✅ Optimized drop handlers

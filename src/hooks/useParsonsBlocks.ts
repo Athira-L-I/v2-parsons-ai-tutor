@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useEffect } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
 
 // Types (extract from existing BlockItem interface)
 export interface BlockItem {
@@ -130,11 +130,22 @@ export function useParsonsBlocks(onSolutionChange?: (solution: string[], blocks:
     });
   }, []);
 
+  // Keep track of the last solution to avoid unnecessary updates
+  const lastSolutionRef = useRef<string>('');
+  
   // Side effect: notify parent of solution changes
   const notifySolutionChange = useCallback((blocks: BlockItem[]) => {
     if (onSolutionChange) {
       const solution = generateSolution(blocks);
-      onSolutionChange(solution, blocks);
+      
+      // Generate a signature for the current solution to detect changes
+      const solutionSignature = JSON.stringify(solution);
+      
+      // Only update if the solution has actually changed
+      if (solutionSignature !== lastSolutionRef.current) {
+        lastSolutionRef.current = solutionSignature;
+        onSolutionChange(solution, blocks);
+      }
     }
   }, [generateSolution, onSolutionChange]);
 
@@ -166,9 +177,22 @@ export function useParsonsBlocks(onSolutionChange?: (solution: string[], blocks:
     }, [notifySolutionChange])
   };
 
+  // Track if this is first mount to avoid initial updates
+  const isFirstMountRef = useRef(true);
+  
   // Effect to handle solution change notifications after state updates
   useEffect(() => {
-    notifySolutionChange(state.sortableBlocks);
+    // Skip initial render notification
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+    
+    // Skip solution change notification if blocks array is empty
+    // This prevents unnecessary updates when the component is first rendered
+    if (state.sortableBlocks.length > 0) {
+      notifySolutionChange(state.sortableBlocks);
+    }
   }, [state.sortableBlocks, notifySolutionChange]);
 
   return {

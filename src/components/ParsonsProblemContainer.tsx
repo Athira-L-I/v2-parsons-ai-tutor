@@ -348,21 +348,24 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
       if (result) {
         console.log('✅ Adaptive features applied successfully:', result);
 
-        // Apply the adapted settings
-        setCurrentProblem(result.newSettings);
-        setAdaptiveState(result.newState);
+        // Only update if there were actual changes
+        if (result.success && result.actionsApplied.length > 0) {
+          // Apply the adapted settings
+          setCurrentProblem(result.newSettings);
+          setAdaptiveState(result.newState);
 
-        // Update problem data to reflect adaptation
-        setProblemData((prev: ProblemData | null) => prev ? {
-          ...prev,
-          parsonsSettings: result.newSettings,
-          title:
-            (prev?.title || title).replace(' (Adapted)', '') + ' (Adapted)',
-          description: result.message,
-        } : null);
+          // Update problem data to reflect adaptation
+          setProblemData((prev: ProblemData | null) => prev ? {
+            ...prev,
+            parsonsSettings: result.newSettings,
+            title:
+              (prev?.title || title).replace(' (Adapted)', '') + ' (Adapted)',
+            description: result.message,
+          } : null);
 
-        // Clear user solution since the problem structure changed
-        setUserSolution([]);
+          // Clear user solution since the problem structure changed
+          setUserSolution([]);
+        }
 
         setAdaptationMessage(result.message);
         setTimeout(() => setAdaptationMessage(null), 8000);
