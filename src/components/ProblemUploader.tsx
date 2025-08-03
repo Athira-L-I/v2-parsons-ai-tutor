@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { useParsonsContext } from '@/contexts/useParsonsContext';
-import { ParsonsGrader } from '@/@types/types';
+import { ParsonsGrader, ParsonsSettings } from '@/@types/types';
+
+interface ProblemUploaderProps {
+  onProblemGenerated?: (problem: ParsonsSettings) => void;
+}
 
 /**
  * Enhanced version of the ProblemUploader component that integrates with the
  * existing codebase and properly generates Parsons problems
  */
-const ProblemUploader: React.FC = () => {
+const ProblemUploader: React.FC<ProblemUploaderProps> = ({ onProblemGenerated }) => {
   const [sourceCode, setSourceCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +33,10 @@ const ProblemUploader: React.FC = () => {
       if (!isUsingBackend) {
         const problem = generateProblemLocally(sourceCode);
         setCurrentProblem(problem);
+        // Call the callback if provided
+        if (onProblemGenerated) {
+          onProblemGenerated(problem);
+        }
       } else {
         // Use backend API to generate the problem
         const response = await fetch('/api/problems/generate', {
@@ -45,6 +53,10 @@ const ProblemUploader: React.FC = () => {
         
         const data = await response.json();
         setCurrentProblem(data.parsonsSettings);
+        // Call the callback if provided
+        if (onProblemGenerated) {
+          onProblemGenerated(data.parsonsSettings);
+        }
       }
       
       // Clear the input after successful generation

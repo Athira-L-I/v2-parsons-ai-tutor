@@ -93,6 +93,14 @@ export const fetchProblemById = async (id: string) => {
   if (!id || typeof id !== 'string') {
     throw new Error('Invalid problem ID provided');
   }
+  
+  return getProblem(id);
+};
+
+export const getProblem = async (id: string) => {
+  if (!id || typeof id !== 'string') {
+    throw new Error('Invalid problem ID provided');
+  }
 
   if (id === 'demo-problem-1') {
     return {

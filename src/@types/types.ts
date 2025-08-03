@@ -10,6 +10,18 @@ export const enum ParsonsGrader {
   Turtle = 'ParsonsWidget._graders.TurtleGrader',
 }
 
+export interface ProblemData {
+  id: string;
+  title: string;
+  description: string;
+  parsonsSettings: ParsonsSettings;
+  solution?: string[];
+  difficulty?: string;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface VariableTest {
   initcode?: string;
   code?: string;
