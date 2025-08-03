@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import { isIndentationProvided } from '@/lib/adaptiveFeatures';
 import { adaptiveController } from '@/lib/adaptiveController';
 

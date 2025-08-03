@@ -1,245 +1,98 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
-import { ParsonsSettings } from '@/@types/types';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import CombinedBlock from './CombinedBlock';
+import { useParsonsBlocks, BlockItem } from '@/hooks/useParsonsBlocks';
 
 const IndentationControls = dynamic(() => import('./IndentationControls'), {
   ssr: false,
 });
 
-interface BlockItem {
-  id: string;
-  text: string;
-  indentation: number;
-  isDistractor?: boolean;
-  groupId?: number;
-  groupColor?: string;
-  isPairedDistractor?: boolean;
-  isCombined?: boolean;
-  subLines?: string[];
-}
+// Removed useBlockManagement and useSolutionGeneration hooks
+// They are now replaced by useParsonsBlocks in @/hooks/useParsonsBlocks.ts
 
-// ✅ Custom hook to extract solution generation logic
-const useSolutionGeneration = () => {
-  const generateSolutionFromBlocks = useCallback((blocks: BlockItem[]) => {
-    return blocks.map((block) => {
-      const indent = '    '.repeat(block.indentation);
+// Removed useDragAndDrop hook
+// Drag and drop functionality will be handled directly in the component
 
-      if (block.isCombined && block.subLines) {
-        return block.subLines
-          .map((subLine) => {
-            const hasIndent = /^\s+/.test(subLine);
-            return hasIndent ? subLine : indent + subLine.trim();
-          })
-          .join('\n');
-      } else {
-        return `${indent}${block.text}`;
-      }
-    });
-  }, []);
-
-  return { generateSolutionFromBlocks };
-};
-
-// ✅ Custom hook for block management
-const useBlockManagement = (
-  currentProblem: ParsonsSettings | null,
-  setUserSolution: (solution: string[]) => void,
-  setCurrentBlocks?: (blocks: BlockItem[]) => void
-) => {
-  const [sortableBlocks, setSortableBlocks] = useState<BlockItem[]>([]);
-  const [trashBlocks, setTrashBlocks] = useState<BlockItem[]>([]);
-  const { generateSolutionFromBlocks } = useSolutionGeneration();
-
-  const updateSolution = useCallback(
-    (blocks: BlockItem[]) => {
-      const solution = generateSolutionFromBlocks(blocks);
+const ParsonsBoard: React.FC = () => {
+  const { currentProblem, setUserSolution, isCorrect, setCurrentBlocks } =
+    useParsonsContext();
+    
+  // Use the new clean hook with proper dependencies
+  const { sortableBlocks, trashBlocks, actions } = useParsonsBlocks(
+    // Clean callback - only update solution
+    useCallback((solution: string[], blocks: BlockItem[]) => {
       setUserSolution(solution);
-
+      // Update currentBlocks immediately with the blocks that were passed from the hook
       if (setCurrentBlocks) {
         setCurrentBlocks(blocks);
       }
-    },
-    [generateSolutionFromBlocks, setUserSolution, setCurrentBlocks]
+    }, [setUserSolution, setCurrentBlocks])
   );
-
-  const updateBlocks = useCallback(
-    (newSortableBlocks: BlockItem[], newTrashBlocks?: BlockItem[]) => {
-      setSortableBlocks(newSortableBlocks);
-      if (newTrashBlocks !== undefined) {
-        setTrashBlocks(newTrashBlocks);
-      }
-      updateSolution(newSortableBlocks);
-    },
-    [updateSolution]
-  );
-
-  // ✅ Fixed circular dependency
-  const changeIndentation = useCallback(
-    (blockId: string, newIndent: number) => {
-      if (!currentProblem?.options.can_indent) return;
-
-      setSortableBlocks((prevBlocks) => {
-        const updatedBlocks = prevBlocks.map((block) =>
-          block.id === blockId ? { ...block, indentation: newIndent } : block
-        );
-
-        // Update solution immediately with the new blocks
-        updateSolution(updatedBlocks);
-        return updatedBlocks;
-      });
-    },
-    [currentProblem?.options.can_indent, updateSolution]
-  );
-
-  return {
-    sortableBlocks,
-    trashBlocks,
-    setSortableBlocks,
-    setTrashBlocks,
-    updateBlocks,
-    updateSolution,
-    changeIndentation,
-  };
-};
-
-// ✅ Custom hook for drag and drop
-const useDragAndDrop = (
-  blocks: { sortableBlocks: BlockItem[]; trashBlocks: BlockItem[] },
-  updateBlocks: (sortableBlocks: BlockItem[], trashBlocks?: BlockItem[]) => void
-) => {
-  const [draggedItem, setDraggedItem] = useState<BlockItem | null>(null);
-  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
-
+  
+  // State for drag and drop
+  const [draggedItem, setDraggedItem] = React.useState<BlockItem | null>(null);
+  const [draggedBlockId, setDraggedBlockId] = React.useState<string | null>(null);
+  
+  // Clean drag and drop handlers
   const handleDragStart = useCallback(
-    (
-      e: React.DragEvent,
-      area: 'sortable' | 'trash',
-      block: BlockItem,
-      index: number
-    ) => {
+    (e: React.DragEvent, area: 'sortable' | 'trash', block: BlockItem, index: number) => {
       console.log('Drag start:', block.id, 'from', area);
-
+      
       const dragData = { area, block, index };
       e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
       e.dataTransfer.effectAllowed = 'move';
-
+      
       setDraggedItem(block);
       setDraggedBlockId(block.id);
     },
     []
   );
-
+  
   const handleDragEnd = useCallback(() => {
     console.log('Drag end');
     setDraggedItem(null);
     setDraggedBlockId(null);
   }, []);
-
+  
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }, []);
-
+  
   const handleDropToSortable = useCallback(
     (e: React.DragEvent, dropIndex?: number) => {
       e.preventDefault();
       console.log('Drop to sortable at index:', dropIndex);
-
+      
       try {
         const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-
-        if (data.area === 'trash') {
-          const newTrashBlocks = [...blocks.trashBlocks];
-          const [draggedBlock] = newTrashBlocks.splice(data.index, 1);
-
-          const newSortableBlocks = [...blocks.sortableBlocks];
-          const insertIndex = dropIndex ?? newSortableBlocks.length;
-          newSortableBlocks.splice(insertIndex, 0, draggedBlock);
-
-          updateBlocks(newSortableBlocks, newTrashBlocks);
-        } else if (data.area === 'sortable' && dropIndex !== undefined) {
-          const newSortableBlocks = [...blocks.sortableBlocks];
-          const [draggedBlock] = newSortableBlocks.splice(data.index, 1);
-          newSortableBlocks.splice(dropIndex, 0, draggedBlock);
-
-          updateBlocks(newSortableBlocks);
-        }
+        actions.moveBlock(data.area, 'sortable', data.index, dropIndex);
       } catch (error) {
         console.error('Error handling drop:', error);
       } finally {
         handleDragEnd();
       }
     },
-    [blocks, updateBlocks, handleDragEnd]
+    [actions, handleDragEnd]
   );
-
+  
   const handleDropToTrash = useCallback(
     (e: React.DragEvent, dropIndex?: number) => {
       e.preventDefault();
       console.log('Drop to trash at index:', dropIndex);
-
+      
       try {
         const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-
-        if (data.area === 'sortable') {
-          const newSortableBlocks = [...blocks.sortableBlocks];
-          const [draggedBlock] = newSortableBlocks.splice(data.index, 1);
-
-          const newTrashBlocks = [...blocks.trashBlocks];
-          const insertIndex = dropIndex ?? newTrashBlocks.length;
-          newTrashBlocks.splice(insertIndex, 0, draggedBlock);
-
-          updateBlocks(newSortableBlocks, newTrashBlocks);
-        } else if (data.area === 'trash' && dropIndex !== undefined) {
-          const newTrashBlocks = [...blocks.trashBlocks];
-          const [draggedBlock] = newTrashBlocks.splice(data.index, 1);
-          newTrashBlocks.splice(dropIndex, 0, draggedBlock);
-
-          updateBlocks(blocks.sortableBlocks, newTrashBlocks);
-        }
+        actions.moveBlock(data.area, 'trash', data.index, dropIndex);
       } catch (error) {
         console.error('Error handling drop:', error);
       } finally {
         handleDragEnd();
       }
     },
-    [blocks, updateBlocks, handleDragEnd]
-  );
-
-  return {
-    draggedItem,
-    draggedBlockId,
-    handleDragStart,
-    handleDragEnd,
-    handleDragOver,
-    handleDropToSortable,
-    handleDropToTrash,
-  };
-};
-
-const ParsonsBoard: React.FC = () => {
-  const { currentProblem, setUserSolution, isCorrect, setCurrentBlocks } =
-    useParsonsContext();
-  const {
-    sortableBlocks,
-    trashBlocks,
-    setSortableBlocks,
-    setTrashBlocks,
-    updateBlocks,
-    changeIndentation,
-  } = useBlockManagement(currentProblem, setUserSolution, setCurrentBlocks);
-
-  const {
-    draggedItem,
-    draggedBlockId,
-    handleDragStart,
-    handleDragEnd,
-    handleDragOver,
-    handleDropToSortable,
-    handleDropToTrash,
-  } = useDragAndDrop({ sortableBlocks, trashBlocks }, updateBlocks);  // ✅ Block initialization with adaptive features support - Smart re-initialization
+    [actions, handleDragEnd]
+  );  // Initialize blocks when problem changes
   useEffect(() => {
     if (!currentProblem) return;
 
@@ -328,7 +181,9 @@ const ParsonsBoard: React.FC = () => {
         isCombined,
         subLines,
       };
-    });    const shuffledBlocks = [...initialBlocks].sort(() => Math.random() - 0.5);
+    });
+    
+    const shuffledBlocks = [...initialBlocks].sort(() => Math.random() - 0.5);
 
     console.log('🎲 Shuffled blocks created:', {
       total: shuffledBlocks.length,
@@ -337,13 +192,13 @@ const ParsonsBoard: React.FC = () => {
     });
 
     if (currentProblem.options.trashId) {
-      updateBlocks([], shuffledBlocks);
+      actions.setInitialBlocks([], shuffledBlocks);
     } else {
-      updateBlocks(shuffledBlocks, []);
+      actions.setInitialBlocks(shuffledBlocks, []);
     }
     
     console.log('✅ Block initialization complete');
-  }, [currentProblem, updateBlocks, sortableBlocks.length, trashBlocks.length]); // Added block lengths to dependencies
+  }, [currentProblem, actions, sortableBlocks.length, trashBlocks.length]); // Added block lengths to dependencies
 
   // ✅ Handle indentation mode changes
   useEffect(() => {
@@ -386,10 +241,14 @@ const ParsonsBoard: React.FC = () => {
         });
       };
 
-      setSortableBlocks((prev) => updateBlocksWithCorrectIndentation(prev));
-      setTrashBlocks((prev) => updateBlocksWithCorrectIndentation(prev));
+      // Update both sortable and trash blocks with correct indentation
+      const updatedSortableBlocks = updateBlocksWithCorrectIndentation(sortableBlocks);
+      const updatedTrashBlocks = updateBlocksWithCorrectIndentation(trashBlocks);
+      
+      // Use the actions from our reducer to update the blocks
+      actions.updateBlocks(updatedSortableBlocks, updatedTrashBlocks);
     }
-  }, [currentProblem, setSortableBlocks, setTrashBlocks]);
+  }, [currentProblem, sortableBlocks, trashBlocks, actions]);
   // ✅ Optimized drop handlers
   const handleSortableDropHandler = useCallback(
     (e: React.DragEvent, index?: number) => {
@@ -407,31 +266,31 @@ const ParsonsBoard: React.FC = () => {
     [handleDropToTrash]
   );
 
-  // ✅ Optimized indentation handlers for blocks
+  // Clean indentation handler
   const createIndentationHandlers = useCallback(
     (blockId: string, currentIndentation: number) => ({
       onIndentDecrease: () => {
         if (currentIndentation > 0) {
-          changeIndentation(blockId, currentIndentation - 1);
+          actions.changeIndentation(blockId, currentIndentation - 1);
         }
       },
       onIndentIncrease: () => {
-        changeIndentation(blockId, currentIndentation + 1);
+        actions.changeIndentation(blockId, currentIndentation + 1);
       },
     }),
-    [changeIndentation]
+    [actions]
   );
 
-  // ✅ Optimized combined block indentation handler
+  // Clean combined block indentation handler
   const createCombinedBlockIndentationHandler = useCallback(
     (blockId: string, area: 'sortable' | 'trash') => {
       if (area === 'sortable') {
         return (idx: number, newIndent: number) =>
-          changeIndentation(blockId, newIndent);
+          actions.changeIndentation(blockId, newIndent);
       }
       return () => {};
     },
-    [changeIndentation]
+    [actions]
   );
 
   // ✅ Memoized render functions

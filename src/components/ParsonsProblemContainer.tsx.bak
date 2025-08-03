@@ -56,7 +56,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
   description = '',
   showUploader = false,
 }) => {
-  const {
+  const { 
     currentProblem,
     setCurrentProblem,
     userSolution,
@@ -68,9 +68,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     setAdaptiveState,
     adaptationMessage,
     setAdaptationMessage,
-  } = useParsonsContext();
-
-  // Local state for API integration and adaptive features
+  } = useParsonsContext();  // Local state for API integration and adaptive features
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [problemData, setProblemData] = useState<ProblemData | null>(null);
@@ -133,7 +131,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     }
   }, [currentProblem, setUserSolution]);
   
-  // Define the functions before using them in useEffect
+  // Define the functions before using them in useEffect, wrapped in useCallback
   const setupInitialProblem = useCallback((problem: ParsonsSettings) => {
     console.log('✅ Setting up initial problem', {
       hasInitial: !!problem.initial,
@@ -230,59 +228,105 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
       console.log('⏳ No problem provided, waiting...');
       setIsInitialized(true);
     }
-  }, [problemId, initialProblem, isInitialized, currentProblem, loadProblemFromApi, setupInitialProblem]);
+  }, [problemId, initialProblem, isInitialized, currentProblem, loadProblemFromApi, setupInitialProblem]); // Include all dependencies
+    try {
+      const progress = LocalStorageService.getProblemProgress(id);
+      if (progress && progress.currentSolution.length > 0) {
+        console.log('💾 Restoring progress from local storage:', progress);
 
-  // Save solution to local storage whenever it changes
+        // SAFETY CHECK - Verify the solution matches the current problem
+        // This prevents loading a solution for a different problem
+        if (currentProblem && currentProblem.initial) {
+          const problemLines = currentProblem.initial
+            .split('\n')
+            .filter(
+              (line) => !line.includes('#distractor') && line.trim().length > 0
+            );
+
+          // Check if at least 70% of solution lines are found in the problem
+          const matchingLines = progress.currentSolution.filter((line) =>
+            problemLines.some((probLine) =>
+              probLine.trim().includes(line.trim())
+            )
+          ).length;
+
+          const matchPercentage =
+            problemLines.length > 0
+              ? (matchingLines / problemLines.length) * 100
+              : 0;
+
+          if (matchPercentage < 70) {
+            console.warn(
+              '⚠️ Stored solution appears to be for a different problem:',
+              {
+                matchPercentage,
+                problemLines: problemLines.length,
+                matchingLines,
+              }
+            );
+            return; // Don't restore incompatible solution
+          }
+        }
+
+        setUserSolution(progress.currentSolution);
+
+        if (progress.isCompleted) {
+          console.log('✅ Problem was previously completed');
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to restore progress from local storage:', err);
+    }
+  };
+
+  // Save progress to local storage whenever solution changes
   useEffect(() => {
     if (problemId && userSolution.length > 0) {
       LocalStorageService.updateProblemSolution(problemId, userSolution);
     }
   }, [problemId, userSolution]);
 
-  // Save completion status when solution is correct
+  // Save completion status when problem is solved
   useEffect(() => {
     if (problemId && isCorrect === true && userSolution.length > 0) {
       LocalStorageService.markProblemCompleted(problemId, userSolution);
     }
   }, [problemId, isCorrect, userSolution]);
 
-  // Handle adaptive recommendations and solution checking
-  const handleCheckComplete = () => {
-    console.log('🔍 Checking solution status:', {
-      isCorrect,
-      adaptiveState,
-      attempts,
-    });
+  const handleCheckComplete = (isCorrect: boolean) => {
+    console.log('🎯 Solution checked, is correct:', isCorrect);
 
     // Update adaptive state
     const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
       adaptiveState,
-      isCorrect === true
+      isCorrect
     );
     setAdaptiveState(newAdaptiveState);
 
-    // Track attempts in local storage
+    // Increment attempts in local storage
     if (problemId) {
       LocalStorageService.incrementProblemAttempts(problemId);
     }
 
-    // If correct, mark as completed in local storage
+    // If correct, mark as completed
     if (isCorrect && problemId && userSolution.length > 0) {
       LocalStorageService.markProblemCompleted(problemId, userSolution);
     }
 
-    // Show recommendation message after failed attempts
-    if (!isCorrect && adaptiveState.incorrectAttempts >= 2) {
-      if (adaptiveFeaturesEnabled) {
-        setAdaptationMessage(
-          'Having trouble? Try using the "Apply Adaptive Help" button above.'
-        );
-        setTimeout(() => setAdaptationMessage(null), 5000);
-      }
+    // Show adaptive help message when available
+    if (
+      adaptiveFeaturesEnabled &&
+      newAdaptiveState.incorrectAttempts >= 2 &&
+      !isCorrect
+    ) {
+      setAdaptationMessage(
+        'Adaptive help is now available! Click "Apply Adaptive Help" to get assistance.'
+      );
+      setTimeout(() => setAdaptationMessage(null), 5000);
     }
   };
 
-  const handleRetry = useCallback(() => {
+  const handleRetry = () => {
     console.log('🔄 Retrying problem load...');
     setIsInitialized(false);
     resetContext();
@@ -292,7 +336,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     } else if (initialProblem) {
       setupInitialProblem(initialProblem);
     }
-  }, [problemId, initialProblem, setIsInitialized, resetContext, loadProblemFromApi, setupInitialProblem]);
+  };
 
   const handleClearProgress = () => {
     if (problemId && confirm('Clear all progress for this problem?')) {
@@ -314,38 +358,40 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     
     if (adaptiveFeaturesEnabled) {
       setAdaptationMessage(
-        'Adaptive features enabled. The problem will adapt based on your progress.'
+        'Adaptive features enabled! Make incorrect attempts to trigger adaptive help.'
       );
       const timer = setTimeout(() => setAdaptationMessage(null), 3000);
-      return () => clearTimeout(timer);
+      return () => clearTimeout(timer); // Clean up the timer
     } else {
       setAdaptationMessage(null);
     }
   }, [adaptiveFeaturesEnabled, setAdaptationMessage]);
 
-  // Apply adaptive features
   const applyAdaptiveFeatures = () => {
-    if (!adaptiveFeaturesEnabled) {
-      setAdaptationMessage('Please enable adaptive features first.');
+    if (!originalProblem || !adaptiveFeaturesEnabled) {
+      console.warn(
+        '❌ Cannot apply adaptive features: no original problem or features disabled'
+      );
+      return;
+    }
+
+    const shouldTrigger =
+      adaptiveController.shouldTriggerAdaptation(adaptiveState);
+    if (!shouldTrigger) {
+      setAdaptationMessage('No adaptive changes needed at this time');
       setTimeout(() => setAdaptationMessage(null), 3000);
       return;
     }
 
-    if (!currentProblem || !originalProblem) {
-      setAdaptationMessage('No problem available for adaptation.');
-      setTimeout(() => setAdaptationMessage(null), 3000);
-      return;
-    }
+    console.log('🔧 Applying adaptive features...', adaptiveState);
 
     try {
-      console.log('🔧 Applying adaptive features based on state:', adaptiveState);
-
       const result = adaptiveController.applyAdaptiveFeatures(
         adaptiveState,
         originalProblem
       );
 
-      if (result) {
+      if (result.success) {
         console.log('✅ Adaptive features applied successfully:', result);
 
         // Apply the adapted settings
@@ -367,23 +413,26 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
         setAdaptationMessage(result.message);
         setTimeout(() => setAdaptationMessage(null), 8000);
       } else {
-        setAdaptationMessage('Could not adapt problem further.');
+        console.log('ℹ️ No adaptive changes applied');
+        setAdaptationMessage('No adaptive changes were applied');
         setTimeout(() => setAdaptationMessage(null), 3000);
       }
     } catch (err) {
-      console.error('Error applying adaptive features:', err);
-      setAdaptationMessage(
-        'Error applying adaptive features. Please try again.'
-      );
-      setTimeout(() => setAdaptationMessage(null), 3000);
+      const errorMessage =
+        err instanceof Error ? err.message : 'Unknown error during adaptation';
+      console.error('❌ Error during adaptation:', err);
+      setAdaptationMessage(`Error applying adaptive features: ${errorMessage}`);
+      setTimeout(() => setAdaptationMessage(null), 5000);
     }
   };
 
-  // Reset to original problem state
   const resetToOriginal = () => {
-    if (originalProblem) {
-      console.log('🔄 Resetting problem to original state');
-      
+    if (
+      originalProblem &&
+      confirm('Reset to original problem? This will clear your progress.')
+    ) {
+      console.log('🔄 Resetting to original problem');
+
       setCurrentProblem(originalProblem);
       setAdaptiveState(adaptiveController.createInitialState());
       setUserSolution([]);
@@ -399,7 +448,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     }
   };
 
-  // Conditional rendering based on state
+  // Show loading state
   if (loading) {
     return (
       <div className="parsons-problem-container">
@@ -446,7 +495,6 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     );
   }
 
-  // Main component render
   return (
     <div className="parsons-problem-container">
       {/* Header with problem info */}

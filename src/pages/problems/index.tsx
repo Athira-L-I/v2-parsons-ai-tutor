@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NextPage } from 'next';
 import Link from 'next/link';
 import { fetchProblems } from '@/lib/api';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 
 interface Problem {
   id: string;
@@ -58,7 +58,8 @@ const ProblemsPage: NextPage = () => {
     };
     
     loadProblems();
-  }, [resetContext]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array to ensure it only runs once when component mounts
   
   const filteredProblems = filter === 'all' 
     ? problems 

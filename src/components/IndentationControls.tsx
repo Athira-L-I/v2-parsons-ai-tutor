@@ -1,5 +1,6 @@
 import React from 'react';
-import { useParsonsContext, BlockItem } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
+import { BlockItem } from '@/hooks/useParsonsBlocks';
 import IndentationHelper from './IndentationHelper';
 import { generateIndentationHints } from '@/lib/adaptiveFeatures';
 

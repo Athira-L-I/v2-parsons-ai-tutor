@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import { ValidationService } from '@/lib/validationService';
 import { generateIndentationHints } from '@/lib/adaptiveFeatures';
 

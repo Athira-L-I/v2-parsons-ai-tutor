@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { NextPage } from 'next';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import ParsonsProblemContainer from '@/components/ParsonsProblemContainer'; 
 import ProblemUploader from '@/components/ProblemUploader';
 

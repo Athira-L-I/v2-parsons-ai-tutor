@@ -1,15 +1,15 @@
 import '@/styles/globals.css';
 import '@/styles/parsons.css';
 import type { AppProps } from 'next/app';
-import { ParsonsProvider } from '@/contexts/ParsonsContext';
+import { ParsonsProviders } from '@/contexts/ParsonsProviders';
 import Layout from '@/components/Layout';
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
-    <ParsonsProvider>
+    <ParsonsProviders>
       <Layout>
         <Component {...pageProps} />
       </Layout>
-    </ParsonsProvider>
+    </ParsonsProviders>
   );
 }

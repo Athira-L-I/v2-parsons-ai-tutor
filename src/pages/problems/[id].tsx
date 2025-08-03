@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { NextPage } from 'next';
 import { fetchProblemById, checkSolution, generateFeedback } from '@/lib/api';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import ParsonsProblemContainer from '@/components/ParsonsProblemContainer'; 
 
 const ProblemPage: NextPage = () => {

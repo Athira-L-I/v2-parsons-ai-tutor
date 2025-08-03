@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import ParsonsBoard from './ParsonsBoard';
 import ChatFeedbackPanel from './ChatFeedbackPanel';
 import SolutionChecker from './SolutionChecker';

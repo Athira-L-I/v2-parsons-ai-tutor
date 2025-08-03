@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import { ParsonsSettings } from '@/@types/types';
 import { isParsonsWidgetLoaded, loadParsonsWidget } from '@/lib/parsonsLoader';
 import * as api from '@/lib/api';

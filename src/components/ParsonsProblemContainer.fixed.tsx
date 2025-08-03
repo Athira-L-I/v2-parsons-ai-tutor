@@ -255,9 +255,9 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     });
 
     // Update adaptive state
-    const newAdaptiveState = adaptiveController.updateStateAfterAttempt(
+    const newAdaptiveState = adaptiveController.updateAttemptStats(
       adaptiveState,
-      isCorrect === true
+      isCorrect
     );
     setAdaptiveState(newAdaptiveState);
 
@@ -273,12 +273,11 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
 
     // Show recommendation message after failed attempts
     if (!isCorrect && adaptiveState.incorrectAttempts >= 2) {
-      if (adaptiveFeaturesEnabled) {
+      adaptiveFeaturesEnabled &&
         setAdaptationMessage(
           'Having trouble? Try using the "Apply Adaptive Help" button above.'
         );
-        setTimeout(() => setAdaptationMessage(null), 5000);
-      }
+      setTimeout(() => setAdaptationMessage(null), 5000);
     }
   };
 
@@ -340,9 +339,9 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     try {
       console.log('🔧 Applying adaptive features based on state:', adaptiveState);
 
-      const result = adaptiveController.applyAdaptiveFeatures(
-        adaptiveState,
-        originalProblem
+      const result = adaptiveController.getAdaptedProblem(
+        originalProblem,
+        adaptiveState
       );
 
       if (result) {

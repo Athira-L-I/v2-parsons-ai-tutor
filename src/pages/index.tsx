@@ -3,7 +3,7 @@ import { NextPage } from 'next';
 import Link from 'next/link';
 import ParsonsProblemContainer from '@/components/ParsonsProblemContainer';
 import { ParsonsGrader } from '@/@types/types';
-import { useParsonsContext } from '@/contexts/ParsonsContext';
+import { useParsonsContext } from '@/contexts/useParsonsContext';
 import * as api from '@/lib/api';
 
 /**
