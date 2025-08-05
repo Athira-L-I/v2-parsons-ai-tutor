@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { NextPage } from 'next';
 import Link from 'next/link';
 import ParsonsProblemContainer from '@/components/ParsonsProblemContainer';
-import { ParsonsGrader } from '@/@types/types';
+import { ParsonsGrader, ParsonsSettings } from '@/@types/types';
 import { useParsonsContext } from '@/contexts/useParsonsContext';
-import * as api from '@/lib/api';
+import { useServices } from '@/contexts/ServiceContext';
+import { DataModelConverter } from '@/types/legacy';
 
 /**
  * Sample initial problem for demo purposes as a fallback
@@ -27,10 +28,21 @@ const HomePage: NextPage = () => {
   const [showDemo, setShowDemo] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [demoProblem, setDemoProblem] = useState<any>(null);
+  
+  // Define proper type for demo problem
+  interface DemoProblemData {
+    id: string;
+    title: string;
+    description: string;
+    parsonsSettings: ParsonsSettings; // Using the proper type
+  }
+  
+  const [demoProblem, setDemoProblem] = useState<DemoProblemData | null>(null);
 
   // Get the resetContext function from context
   const { setCurrentProblem, resetContext } = useParsonsContext();
+  // Access repository services
+  const { problemRepository } = useServices();
 
   const handleTryDemo = async () => {
     // Reset context before loading a new problem
@@ -41,10 +53,26 @@ const HomePage: NextPage = () => {
     setShowCreate(false);
 
     try {
-      // Fetch the demo problem with a fixed ID
-      const demoProblemData = await api.fetchProblemById('demo-problem-1');
-      setDemoProblem(demoProblemData);
-      setCurrentProblem(demoProblemData.parsonsSettings);
+      // Fetch the demo problem with a fixed ID using repository
+      const problem = await problemRepository.findById('demo-problem-1');
+      
+      if (problem) {
+        // Convert domain model to legacy format
+        const legacySettings = DataModelConverter.problemToLegacySettings(problem);
+        
+        // Create compatible data structure
+        const demoProblemData = {
+          id: problem.id,
+          title: problem.title,
+          description: problem.description,
+          parsonsSettings: legacySettings
+        };
+        
+        setDemoProblem(demoProblemData);
+        setCurrentProblem(legacySettings);
+      } else {
+        throw new Error('Demo problem not found');
+      }
     } catch (error) {
       console.error('Failed to load demo problem:', error);
       // Fallback to the sample problem if the API call fails

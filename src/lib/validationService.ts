@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { ParsonsSettings } from '@/@types/types';
+import { SolutionRepository } from '@/services/repositories/SolutionRepository';
+import { BlockArrangement } from '@/types/domain';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -8,9 +10,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
  */
 export class ValidationService {
   private apiUrl: string;
+  private solutionRepository: SolutionRepository;
 
-  constructor(apiUrl: string = API_URL) {
+  constructor(apiUrl: string = API_URL, solutionRepository?: SolutionRepository) {
     this.apiUrl = apiUrl;
+    this.solutionRepository = solutionRepository || new SolutionRepository();
   }
 
   /**
@@ -25,15 +29,25 @@ export class ValidationService {
     solution: string[]
   ): Promise<{ isCorrect: boolean; details: string }> {
     try {
-      const response = await axios.post(
-        `${this.apiUrl}/api/solutions/validate`,
-        {
-          problemId,
-          solution,
-        }
-      );
-
-      return response.data;
+      // Convert solution to BlockArrangement format
+      const arrangement: BlockArrangement = {
+        blocks: solution.map((line, index) => ({
+          blockId: `block-${index}`, // This is a simplification, actual IDs would come from the blocks
+          position: index,
+          indentationLevel: (line.length - line.trimStart().length) / 4, // Assuming 4 spaces per indent level
+          isInSolution: true
+        })),
+        timestamp: Date.now(),
+        attemptNumber: 1
+      };
+      
+      // Use the repository to validate
+      const validationResult = await this.solutionRepository.validate(problemId, arrangement);
+      
+      return {
+        isCorrect: validationResult.isCorrect,
+        details: validationResult.feedback.content
+      };
     } catch (error) {
       console.error('Error validating solution:', error);
       throw new Error('Failed to validate solution');

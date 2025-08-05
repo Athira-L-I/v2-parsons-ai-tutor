@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ParsonsSettings, ProblemData } from '@/@types/types';
-import * as api from '@/lib/api';
+import { useServices } from '@/contexts/ServiceContext';
 import { useProblemContext } from '@/contexts/ProblemContext';
+import { DataModelConverter } from '@/types/legacy';
+import { Problem } from '@/types/domain';
 
 interface ProblemDataContainerProps {
   problemId?: string;
@@ -27,27 +29,39 @@ export const ProblemDataContainer: React.FC<ProblemDataContainerProps> = ({
   children,
 }) => {
   const { setCurrentProblem, setLoading, setError } = useProblemContext();
+  const { problemRepository } = useServices();
   const [problemData, setProblemData] = useState<ProblemData | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const loadProblemFromApi = useCallback(async (id: string) => {
     if (!id) return;
 
-    console.log('🔄 Loading problem from API:', id);
+    console.log('🔄 Loading problem from repository:', id);
     setLoading(true);
     setError(null);
 
     try {
-      const data = await api.getProblem(id);
+      const problem = await problemRepository.findById(id);
       
-      if (data) {
-        console.log('✅ Problem loaded successfully:', data.title);
+      if (problem) {
+        console.log('✅ Problem loaded successfully:', problem.title);
+        
+        // Convert domain Problem to legacy ParsonsSettings for backward compatibility
+        const legacySettings = DataModelConverter.problemToLegacySettings(problem);
+        
+        // Create a ProblemData object to match the expected interface
+        const data: ProblemData = {
+          id: problem.id,
+          title: problem.title,
+          description: problem.description,
+          parsonsSettings: legacySettings
+        };
         
         setProblemData(data);
-        setCurrentProblem(data.parsonsSettings, id);
+        setCurrentProblem(legacySettings, id);
         
         if (onProblemLoaded) {
-          onProblemLoaded(data.parsonsSettings, id);
+          onProblemLoaded(legacySettings, id);
         }
       } else {
         throw new Error('Problem data not found');
@@ -63,7 +77,7 @@ export const ProblemDataContainer: React.FC<ProblemDataContainerProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [setCurrentProblem, setLoading, setError, onProblemLoaded, onError]);
+  }, [problemRepository, setCurrentProblem, setLoading, setError, onProblemLoaded, onError]);
 
   // Function for creating a mock problem from initialProblem is now inlined in useEffect and retry
 
@@ -77,17 +91,28 @@ export const ProblemDataContainer: React.FC<ProblemDataContainerProps> = ({
     
     try {
       if (problemId) {
-        // Directly await the API call to catch any errors here
-        const data = await api.getProblem(problemId);
+        // Use the repository pattern
+        const problem = await problemRepository.findById(problemId);
         
-        if (data) {
-          console.log('✅ Problem loaded successfully on retry:', data.title);
+        if (problem) {
+          console.log('✅ Problem loaded successfully on retry:', problem.title);
+          
+          // Convert domain Problem to legacy ParsonsSettings for backward compatibility
+          const legacySettings = DataModelConverter.problemToLegacySettings(problem);
+          
+          // Create a ProblemData object to match the expected interface
+          const data: ProblemData = {
+            id: problem.id,
+            title: problem.title,
+            description: problem.description,
+            parsonsSettings: legacySettings
+          };
           
           setProblemData(data);
-          setCurrentProblem(data.parsonsSettings, problemId);
+          setCurrentProblem(legacySettings, problemId);
           
           if (onProblemLoaded) {
-            onProblemLoaded(data.parsonsSettings, problemId);
+            onProblemLoaded(legacySettings, problemId);
           }
         } else {
           throw new Error('Problem data not found on retry');
@@ -118,7 +143,7 @@ export const ProblemDataContainer: React.FC<ProblemDataContainerProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [problemId, initialProblem, setCurrentProblem, setLoading, setError, onProblemLoaded, onError]);
+  }, [problemId, initialProblem, problemRepository, setCurrentProblem, setLoading, setError, onProblemLoaded, onError]);
 
   // Load problem on mount or when dependencies change
   useEffect(() => {

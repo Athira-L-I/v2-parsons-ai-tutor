@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParsonsContext } from '@/contexts/useParsonsContext';
 import { ParsonsSettings } from '@/@types/types';
 import { isParsonsWidgetLoaded, loadParsonsWidget } from '@/lib/parsonsLoader';
-import * as api from '@/lib/api';
+import { useServices } from '@/contexts/ServiceContext';
 
 declare global {
   interface Window {
@@ -357,7 +357,17 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
     } finally {
       isInitializingRef.current = false;
     }
-  }, [currentProblem, loadingState, hasError, performCleanup, handleError]);
+  }, [
+    currentProblem, 
+    loadingState, 
+    hasError, 
+    performCleanup, 
+    handleError, 
+    setFeedback, 
+    setIsCorrect, 
+    sortableId, 
+    trashId
+  ]);
 
   // Fix connectWith
   const fixConnectWith = useCallback(() => {
@@ -416,6 +426,9 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
     [setUserSolution, onSolutionChange, sortableId]
   );
 
+  // Access the repository services
+  const { solutionRepository } = useServices();
+  
   // Check solution
   const checkSolution = useCallback(async () => {
     if (!widgetInstance) {
@@ -452,11 +465,27 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
           setIsLoading(true);
 
           try {
-            const socraticFeedbackResult = await api.generateFeedback(
-              problemId,
-              solution
-            );
-            setSocraticFeedback(socraticFeedbackResult);
+            if (typeof problemId === 'string') {
+              // Convert solution to a compatible format for the repository
+              const blockArrangement = {
+                blocks: solution.map((content: string, index: number) => ({
+                  blockId: `block-${index}`,
+                  position: index,
+                  indentationLevel: 0,
+                  isInSolution: true
+                })),
+                timestamp: Date.now(),
+                attemptNumber: 1 // Use current attempt or fallback to 1
+              };
+              
+              // Use the solution repository to generate feedback
+              const validationResult = await solutionRepository.validate(problemId, blockArrangement);
+              const feedbackText = validationResult.feedback.content || 
+                                  validationResult.errors.map(err => err.message).join('\n') || 
+                                  'Incorrect solution. Try again.';
+              
+              setSocraticFeedback(feedbackText);
+            }
           } catch (error) {
             console.error('❌ Error fetching socratic feedback:', error);
             setSocraticFeedback('Error fetching feedback. Please try again.');
@@ -485,6 +514,7 @@ const ParsonsWidgetComponent: React.FC<ParsonsWidgetProps> = ({
     problemId,
     onCheckSolution,
     sortableId,
+    solutionRepository,
   ]);
 
   // Initialize widget when ready

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { NextPage } from 'next';
-import { fetchProblemById, checkSolution, generateFeedback } from '@/lib/api';
 import { useParsonsContext } from '@/contexts/useParsonsContext';
+import { useServices } from '@/contexts/ServiceContext';
+import { DataModelConverter } from '@/types/legacy';
 import ParsonsProblemContainer from '@/components/ParsonsProblemContainer'; 
 
 const ProblemPage: NextPage = () => {
@@ -26,6 +27,9 @@ const ProblemPage: NextPage = () => {
   // Track the current problem ID to detect changes
   const [currentProblemId, setCurrentProblemId] = useState<string | null>(null);
   
+  // Access services through context
+  const { problemRepository, solutionRepository, api } = useServices();
+  
   useEffect(() => {
     // Only fetch if we have an ID and it's different from the current one
     if (id && typeof id === 'string' && id !== currentProblemId) {
@@ -35,10 +39,18 @@ const ProblemPage: NextPage = () => {
         setCurrentProblemId(id);
         
         try {
-          const data = await fetchProblemById(id);
-          setCurrentProblem(data.parsonsSettings);
-          setTitle(data.title);
-          setDescription(data.description);
+          // Use problem repository instead of direct API call
+          const problem = await problemRepository.findById(id);
+          
+          if (problem) {
+            // Convert from domain model to legacy format for backward compatibility
+            const legacySettings = DataModelConverter.problemToLegacySettings(problem);
+            setCurrentProblem(legacySettings);
+            setTitle(problem.title);
+            setDescription(problem.description);
+          } else {
+            throw new Error('Problem not found');
+          }
         } catch (error) {
           console.error('Failed to fetch problem:', error);
           
@@ -69,7 +81,7 @@ const ProblemPage: NextPage = () => {
       
       loadProblem();
     }
-  }, [id, setCurrentProblem, resetContext, currentProblemId]);
+  }, [id, setCurrentProblem, resetContext, currentProblemId, problemRepository]);
   
   const handleCheckSolution = async () => {
     if (!id || !userSolution.length) return;
@@ -77,13 +89,30 @@ const ProblemPage: NextPage = () => {
     setIsLoading(true);
     
     try {
-      // First check if the solution is correct
-      const checkResult = await checkSolution(id.toString(), userSolution);
+      // First check if the solution is correct using the repository compatibility layer
+      const checkResult = await api.checkSolution(id.toString(), userSolution);
       setIsCorrect(checkResult.isCorrect);
       
       // If not correct, get AI feedback
-      if (!checkResult.isCorrect) {
-        const feedbackText = await generateFeedback(id.toString(), userSolution);
+      if (!checkResult.isCorrect && typeof id === 'string') {
+        // Use solution repository for feedback
+        const arrangement = {
+          blocks: userSolution.map((content, index) => ({
+            blockId: `block-${index}`,
+            position: index,
+            indentationLevel: 0,
+            isInSolution: true
+          })),
+          timestamp: Date.now(),
+          attemptNumber: 1
+        };
+        
+        // Get validation feedback
+        const validationResult = await solutionRepository.validate(id, arrangement);
+        // Extract feedback text from the validation result
+        const feedbackText = validationResult.feedback.content || 
+                            validationResult.errors.map(err => err.message).join('\n') ||
+                            'Incorrect solution. Try again.';
         setFeedback(feedbackText);
       } else {
         setFeedback("Great job! Your solution is correct.");

@@ -3,7 +3,6 @@ import { useParsonsContext } from '@/contexts/useParsonsContext';
 import { BlockItem } from '@/hooks/useParsonsBlocks';
 import { generateIndentationHints } from '@/lib/adaptiveFeatures';
 import ChatMessage from './ChatMessage';
-import { sendChatMessage } from '@/lib/api';
 
 const ChatFeedbackPanel: React.FC = () => {
   const {
@@ -211,14 +210,22 @@ const ChatFeedbackPanel: React.FC = () => {
         currentLines,
       });
 
-      // Call the API with properly indented code and solution context
-      const response = await sendChatMessage(
-        problemId || 'no-id',
-        messageContent,
-        chatMessages.filter((msg) => !msg.isTyping),
-        currentLines, // <- IMPORTANT: Using currentLines instead of userSolution
-        solutionContext // <- Including validation context
-      );
+      // TODO: Implement a proper ChatRepository and use it here
+      // For now we'll use the fetch API directly
+      // This will be replaced with a repository call in the future
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/chat/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          problemId: problemId || 'no-id',
+          message: messageContent,
+          chatHistory: chatMessages.filter((msg) => !msg.isTyping),
+          currentSolution: currentLines,
+          solutionContext
+        }),
+      }).then(res => res.json());
 
       console.log('📥 Received chat response:', {
         success: response.success,

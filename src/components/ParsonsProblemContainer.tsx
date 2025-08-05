@@ -8,9 +8,10 @@ import { useParsonsContext } from '@/contexts/useParsonsContext';
 import dynamic from 'next/dynamic';
 import ProblemUploader from './ProblemUploader';
 import { ParsonsSettings } from '@/@types/types';
-import * as api from '@/lib/api';
+import { useServices } from '@/contexts/ServiceContext';
 import LocalStorageService from '@/lib/localStorageService';
 import { adaptiveController } from '@/lib/adaptiveController';
+import { DataModelConverter } from '@/types/legacy';
 
 // Define a proper interface for problem data
 interface ProblemData {
@@ -160,19 +161,37 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     setLoading(false);
   }, [problemId, setCurrentProblem, setOriginalProblem, setProblemData, title, description, restoreProgressFromStorage, setError, setLoading]);
 
+  // Get services via context
+  const { problemRepository } = useServices();
+  
   const loadProblemFromApi = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      console.log(`📡 Attempting API fetch for problem: ${id}`);
-      const data = await api.fetchProblemById(id);
+      console.log(`📡 Attempting repository fetch for problem: ${id}`);
+      const problem = await problemRepository.findById(id);
 
-      if (data) {
-        console.log('✅ Problem loaded from API:', data);
-        setProblemData(data as ProblemData);
-        setCurrentProblem(data.parsonsSettings, id);
-        setOriginalProblem(data.parsonsSettings);
+      if (problem) {
+        // Convert domain model to legacy format for compatibility
+        const legacySettings = DataModelConverter.problemToLegacySettings(problem);
+        
+        // Create a compatible problem data structure
+        const data: ProblemData = {
+          id: problem.id,
+          title: problem.title,
+          description: problem.description,
+          parsonsSettings: legacySettings,
+          difficulty: problem.difficulty,
+          tags: problem.tags,
+          createdAt: problem.createdAt,
+          updatedAt: problem.updatedAt
+        };
+        
+        console.log('✅ Problem loaded from repository:', data);
+        setProblemData(data);
+        setCurrentProblem(legacySettings, id);
+        setOriginalProblem(legacySettings);
         setIsInitialized(true);
       } else {
         throw new Error('Problem data is undefined');
@@ -199,7 +218,7 @@ const ParsonsProblemContainer: React.FC<ParsonsProblemContainerProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [initialProblem, setCurrentProblem, setError, setIsInitialized, setOriginalProblem, setProblemData, setupInitialProblem]);
+  }, [initialProblem, problemRepository, setCurrentProblem, setError, setIsInitialized, setOriginalProblem, setProblemData, setupInitialProblem]);
   
   // Load problem data when component mounts or problemId changes
   useEffect(() => {

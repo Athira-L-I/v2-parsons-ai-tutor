@@ -4,6 +4,7 @@ import { SolutionProvider } from './SolutionContext';
 import { FeedbackProvider } from './FeedbackContext';
 import { AdaptiveProvider } from './AdaptiveContext';
 import { ChatProvider } from './ChatContext';
+import { ServiceProvider } from './ServiceContext';
 
 interface ParsonsProvidersProps {
   children: ReactNode;
@@ -15,16 +16,18 @@ interface ParsonsProvidersProps {
  */
 export const ParsonsProviders: React.FC<ParsonsProvidersProps> = ({ children }) => {
   return (
-    <ProblemProvider>
-      <SolutionProvider>
-        <FeedbackProvider>
-          <AdaptiveProvider>
-            <ChatProvider>
-              {children}
-            </ChatProvider>
-          </AdaptiveProvider>
-        </FeedbackProvider>
-      </SolutionProvider>
-    </ProblemProvider>
+    <ServiceProvider>
+      <ProblemProvider>
+        <SolutionProvider>
+          <FeedbackProvider>
+            <AdaptiveProvider>
+              <ChatProvider>
+                {children}
+              </ChatProvider>
+            </AdaptiveProvider>
+          </FeedbackProvider>
+        </SolutionProvider>
+      </ProblemProvider>
+    </ServiceProvider>
   );
 };
