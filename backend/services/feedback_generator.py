@@ -96,7 +96,52 @@ def generate_feedback(
         return feedback
     except Exception as e:
         print(f"OpenAI API error: {str(e)}")
-        return generate_fallback_feedback(correct_lines, cleaned_user_solution)
+        error_str = str(e)
+        
+        # Check if the solution_length was the issue
+        if "solution_length" in error_str:
+            # Add the solution_length to the analysis if it's missing
+            if "solution_length" not in solution_analysis:
+                solution_analysis["solution_length"] = len(cleaned_user_solution)
+                solution_analysis["expected_length"] = len(correct_lines)
+            
+            print(f"Adding missing solution_length: {solution_analysis.get('solution_length', 0)}")
+            print(f"Expected length: {solution_analysis.get('expected_length', 0)}")
+            
+            # Try again with enhanced analysis that has solution_length
+            try:
+                return generate_fallback_feedback(correct_lines, cleaned_user_solution)
+            except Exception as inner_e:
+                print(f"Fallback feedback also failed: {str(inner_e)}")
+                return "I notice that your solution may be incomplete. Can you add more code blocks to complete the program logic?"
+        
+        # Check if has_indentation_issues was the issue
+        elif "has_indentation_issues" in error_str:
+            # Add indentation analysis if it's missing
+            if "has_indentation_issues" not in solution_analysis:
+                # Run indentation check
+                indentation_check = SharedValidationService.check_indentation_consistency(
+                    correct_lines, cleaned_user_solution
+                )
+                solution_analysis["has_indentation_issues"] = indentation_check["has_indentation_issues"]
+                solution_analysis["indentation_errors"] = indentation_check.get("indentation_errors", [])
+                solution_analysis["indentation_hint_count"] = len(indentation_check.get("indentation_errors", []))
+                
+                print(f"Adding missing indentation fields to analysis")
+                print(f"Has indentation issues: {solution_analysis['has_indentation_issues']}")
+            
+            # Try again with fixed solution_analysis
+            try:
+                return generate_fallback_feedback(correct_lines, cleaned_user_solution)
+            except Exception as inner_e:
+                print(f"Fallback after indentation fix also failed: {str(inner_e)}")
+                if solution_analysis.get("has_indentation_issues", False):
+                    return "I notice there might be indentation issues in your solution. Remember that proper indentation is important in Python. Can you check the indentation of your blocks?"
+                else:
+                    return "Let's review your solution structure. Check if all the necessary code blocks are included and in the right order."
+        
+        else:
+            return generate_fallback_feedback(correct_lines, cleaned_user_solution)
 
 def generate_chat_response(
     problem_settings: Dict[str, Any], 
@@ -193,6 +238,65 @@ TECHNICAL EXPERTISE:
         
     except Exception as e:
         print(f"Chat API error: {str(e)}")
+        error_str = str(e)
+        
+        # Get correct lines and cleaned solution for analysis
+        correct_lines = SharedValidationService.extract_correct_lines(problem_settings)
+        cleaned_user_solution = SharedValidationService.clean_user_solution(user_solution)
+        
+        # Check if the solution_length was the issue
+        if "solution_length" in error_str:
+            # Add the solution_length to the analysis if it's missing
+            if "solution_length" not in solution_analysis:
+                solution_analysis["solution_length"] = len(cleaned_user_solution)
+                solution_analysis["expected_length"] = len(correct_lines)
+                solution_analysis["completion_ratio"] = (
+                    len(cleaned_user_solution) / len(correct_lines) if len(correct_lines) > 0 else 0
+                )
+            
+            print(f"Adding missing solution_length for chat: {solution_analysis.get('solution_length', 0)}")
+            print(f"Expected length: {solution_analysis.get('expected_length', 0)}")
+            
+            # Try again with the enhanced solution_analysis
+            try:
+                return generate_chat_fallback_enhanced(
+                    current_message, 
+                    user_solution, 
+                    problem_settings, 
+                    chat_history
+                )
+            except Exception as inner_e:
+                print(f"Chat fallback also failed: {str(inner_e)}")
+                return "I notice we're having some issues with the validation. Let's focus on your question: what specific part of the problem are you working on right now?"
+        
+        # Check if has_indentation_issues was the issue
+        elif "has_indentation_issues" in error_str:
+            # Add indentation analysis if it's missing
+            if "has_indentation_issues" not in solution_analysis:
+                # Run indentation check
+                indentation_check = SharedValidationService.check_indentation_consistency(
+                    correct_lines, cleaned_user_solution
+                )
+                solution_analysis["has_indentation_issues"] = indentation_check["has_indentation_issues"]
+                solution_analysis["indentation_errors"] = indentation_check.get("indentation_errors", [])
+                solution_analysis["indentation_hint_count"] = len(indentation_check.get("indentation_errors", []))
+                
+                print(f"Adding missing indentation fields to chat analysis")
+                print(f"Has indentation issues: {solution_analysis['has_indentation_issues']}")
+            
+            # Try again with fixed solution_analysis
+            try:
+                return generate_chat_fallback_enhanced(
+                    current_message, 
+                    user_solution, 
+                    problem_settings, 
+                    chat_history
+                )
+            except Exception as inner_e:
+                print(f"Chat fallback after indentation fix also failed: {str(inner_e)}")
+                if "indentation" in current_message.lower() or solution_analysis.get("has_indentation_issues", False):
+                    return "I see you might be asking about indentation. In Python, proper indentation is key - it defines the structure of your code. Let me know which specific part of the indentation is confusing you."
+        
         return generate_chat_fallback_enhanced(
             current_message, 
             user_solution, 
@@ -228,6 +332,32 @@ def analyze_solution_state_enhanced(problem_settings: Dict[str, Any], user_solut
         "comparison_with_correct": {},
         "solution_status": "checked"
     })
+    
+    # Ensure solution_length and expected_length are always present
+    # This prevents the 'solution_length' error we're seeing
+    if "solution_length" not in analysis:
+        analysis["solution_length"] = len(cleaned_user_solution)
+    if "expected_length" not in analysis:
+        analysis["expected_length"] = len(correct_lines)
+    if "completion_ratio" not in analysis:
+        analysis["completion_ratio"] = (
+            analysis["solution_length"] / analysis["expected_length"] if analysis["expected_length"] > 0 else 0
+        )
+        
+    # Ensure indentation fields are always present
+    # This prevents the 'has_indentation_issues' error
+    if "has_indentation_issues" not in analysis:
+        # Check indentation consistency
+        indentation_analysis = SharedValidationService.check_indentation_consistency(
+            correct_lines, user_solution
+        )
+        analysis["has_indentation_issues"] = indentation_analysis["has_indentation_issues"]
+        analysis["indentation_errors"] = indentation_analysis["indentation_errors"]
+        analysis["specific_issues"] = analysis.get("specific_issues", []) + indentation_analysis["specific_issues"]
+    
+    # Make sure indentation_hint_count is present for the frontend
+    if "indentation_hint_count" not in analysis:
+        analysis["indentation_hint_count"] = len(analysis.get("indentation_errors", []))
     
     # Log the context usage
     if solution_context:

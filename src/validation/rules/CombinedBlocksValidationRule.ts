@@ -1,0 +1,215 @@
+import {
+  ValidationRule,
+  ValidationInput,
+  ValidationRuleResult,
+  ValidationError,
+  ValidationErrorType,
+  SolutionBlock,
+} from '../types';
+
+/**
+ * Validation rule that checks the integrity of combined/grouped blocks.
+ * This ensures that blocks that should be kept together (i.e., are part of the same group)
+ * are indeed kept together in the student's solution.
+ *
+ * This rule also verifies that proper indentation relationships within the combined blocks
+ * are maintained, which is critical for blocks representing multi-line code structures.
+ */
+export class CombinedBlocksValidationRule implements ValidationRule {
+  name = 'combined-blocks-validation';
+  priority = 9; // High priority, similar to completeness
+  category = 'completeness' as const; // Using existing category that's closest to our purpose
+
+  async validate(input: ValidationInput): Promise<ValidationRuleResult> {
+    const errors: ValidationError[] = [];
+    let score = 100;
+
+    // Get all blocks with a groupId from the problem (these are combined blocks)
+    const groupedBlocksMap = new Map<string, SolutionBlock[]>();
+
+    // Collect all blocks that have a groupId (i.e., are part of a combined group)
+    for (const block of input.problem.correctSolution) {
+      if (block.groupId) {
+        if (!groupedBlocksMap.has(block.groupId)) {
+          groupedBlocksMap.set(block.groupId, []);
+        }
+        groupedBlocksMap.get(block.groupId)!.push(block);
+      }
+    }
+
+    // If there are no grouped blocks, this validation is not applicable
+    if (groupedBlocksMap.size === 0) {
+      return {
+        passed: true,
+        errors: [],
+        warnings: [],
+        score: 100,
+        confidence: 1.0,
+      };
+    }
+
+    // Check each group for integrity in the student's solution
+    for (const [, blocks] of groupedBlocksMap.entries()) {
+      // Sort blocks by their correct position
+      const correctGroupBlocks = [...blocks].sort(
+        (a, b) => a.correctPosition - b.correctPosition
+      );
+
+      // Get IDs of blocks in this group
+      const groupBlockIds = new Set(
+        correctGroupBlocks.map((block) => block.id)
+      );
+
+      // Find these blocks in the student's solution
+      const userGroupBlocks = input.solution.blocks
+        .filter((block) => groupBlockIds.has(block.id) && block.isInSolution)
+        .sort((a, b) => a.position - b.position);
+
+      // Skip if none of the blocks from this group are in the solution
+      if (userGroupBlocks.length === 0) continue;
+
+      // Skip if only one block from the group is in the solution
+      if (userGroupBlocks.length === 1) continue;
+
+      // Check if all blocks from this group are in the student's solution
+      const missingBlocks = correctGroupBlocks.filter(
+        (block) =>
+          !userGroupBlocks.some((userBlock) => userBlock.id === block.id)
+      );
+
+      // If there are missing blocks from the group, we'll mark it as a completeness error
+      if (missingBlocks.length > 0) {
+        errors.push({
+          type: 'incomplete_solution' as ValidationErrorType,
+          severity: 'major',
+          blockId: userGroupBlocks[0].id,
+          expectedValue: `All ${correctGroupBlocks.length} blocks of the group should be used together`,
+          actualValue: `Only ${userGroupBlocks.length} of ${correctGroupBlocks.length} blocks are used`,
+          message: `This block is part of a combined block group, but not all blocks from the group are used.`,
+          suggestion: 'Make sure to include all parts of the combined block.',
+          position: userGroupBlocks[0].position,
+        });
+
+        score -= 15; // Penalize for incomplete groups
+        continue; // Skip further checks for this incomplete group
+      }
+
+      // Check if the blocks are adjacent (i.e., their positions are consecutive)
+      let isAdjacent = true;
+      for (let i = 1; i < userGroupBlocks.length; i++) {
+        if (
+          userGroupBlocks[i].position !==
+          userGroupBlocks[i - 1].position + 1
+        ) {
+          isAdjacent = false;
+          break;
+        }
+      }
+
+      if (!isAdjacent) {
+        errors.push({
+          type: 'wrong_order' as ValidationErrorType,
+          severity: 'critical',
+          blockId: userGroupBlocks[0].id,
+          expectedValue: 'All blocks of the group should be adjacent',
+          actualValue: 'Blocks of the group are separated',
+          message: `This combined block has been split. Combined blocks must stay together.`,
+          suggestion:
+            'Keep all parts of the combined block together in your solution.',
+          position: userGroupBlocks[0].position,
+        });
+
+        score -= 25; // Significant penalty for splitting groups
+      }
+
+      // Check if the internal order of blocks within the group matches the correct order
+      let internalOrderCorrect = true;
+      for (let i = 0; i < userGroupBlocks.length; i++) {
+        const correctBlock = correctGroupBlocks.find(
+          (b) => b.id === userGroupBlocks[i].id
+        );
+        const correctIndex = correctGroupBlocks.indexOf(correctBlock!);
+
+        if (correctIndex !== i) {
+          internalOrderCorrect = false;
+          break;
+        }
+      }
+
+      if (!internalOrderCorrect) {
+        errors.push({
+          type: 'wrong_order' as ValidationErrorType,
+          severity: 'major',
+          blockId: userGroupBlocks[0].id,
+          expectedValue:
+            'Blocks within the group should maintain correct internal order',
+          actualValue: 'Internal order of blocks is incorrect',
+          message: `The internal order of this combined block is incorrect.`,
+          suggestion:
+            'The order of code lines within a combined block must be preserved.',
+          position: userGroupBlocks[0].position,
+        });
+
+        score -= 15; // Penalize for incorrect internal ordering
+      }
+
+      // Check for proper indentation relationships within the group
+      // This verifies that indentation differences between blocks in a group match the expected pattern
+      let indentationCorrect = true;
+      const indentationErrors: ValidationError[] = [];
+
+      for (let i = 0; i < userGroupBlocks.length; i++) {
+        const userBlock = userGroupBlocks[i];
+        const correctBlock = correctGroupBlocks.find(
+          (b) => b.id === userBlock.id
+        )!;
+
+        // For blocks after the first one in the group, check relative indentation
+        if (i > 0) {
+          const prevUserBlock = userGroupBlocks[i - 1];
+          const prevCorrectBlock = correctGroupBlocks.find(
+            (b) => b.id === prevUserBlock.id
+          )!;
+
+          // Calculate the expected indentation difference between these blocks
+          const expectedDiff =
+            correctBlock.correctIndentation -
+            prevCorrectBlock.correctIndentation;
+          const actualDiff =
+            userBlock.indentationLevel - prevUserBlock.indentationLevel;
+
+          if (expectedDiff !== actualDiff) {
+            indentationCorrect = false;
+            indentationErrors.push({
+              type: 'wrong_indentation' as ValidationErrorType,
+              severity: 'major',
+              blockId: userBlock.id,
+              expectedValue: `Indentation difference of ${expectedDiff} from previous block`,
+              actualValue: `Indentation difference of ${actualDiff} from previous block`,
+              message: `Incorrect indentation within combined block. This line should ${
+                expectedDiff > actualDiff
+                  ? 'be indented more'
+                  : 'be indented less'
+              } relative to the previous line.`,
+              suggestion: `Adjust the indentation to maintain the proper code structure.`,
+              position: userBlock.position,
+            });
+          }
+        }
+      }
+
+      if (!indentationCorrect) {
+        errors.push(...indentationErrors);
+        score -= 15; // Penalize for incorrect indentation relationships
+      }
+    }
+
+    return {
+      passed: errors.length === 0,
+      errors,
+      warnings: [],
+      score: Math.max(0, score),
+      confidence: 0.9,
+    };
+  }
+}

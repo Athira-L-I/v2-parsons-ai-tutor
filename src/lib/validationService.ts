@@ -2,6 +2,8 @@ import axios from 'axios';
 import { ParsonsSettings } from '@/@types/types';
 import { SolutionRepository } from '@/services/repositories/SolutionRepository';
 import { BlockArrangement } from '@/types/domain';
+import { validationEngine } from '@/validation/ValidationEngine';
+import { DataModelConverter } from '@/types/legacy';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -12,7 +14,10 @@ export class ValidationService {
   private apiUrl: string;
   private solutionRepository: SolutionRepository;
 
-  constructor(apiUrl: string = API_URL, solutionRepository?: SolutionRepository) {
+  constructor(
+    apiUrl: string = API_URL,
+    solutionRepository?: SolutionRepository
+  ) {
     this.apiUrl = apiUrl;
     this.solutionRepository = solutionRepository || new SolutionRepository();
   }
@@ -29,29 +34,228 @@ export class ValidationService {
     solution: string[]
   ): Promise<{ isCorrect: boolean; details: string }> {
     try {
-      // Convert solution to BlockArrangement format
+      // Convert solution to BlockArrangement format with proper IDs
+      // Extract blockIds from the solution strings if they contain IDs
+      // or generate new ones if they don't
       const arrangement: BlockArrangement = {
-        blocks: solution.map((line, index) => ({
-          blockId: `block-${index}`, // This is a simplification, actual IDs would come from the blocks
-          position: index,
-          indentationLevel: (line.length - line.trimStart().length) / 4, // Assuming 4 spaces per indent level
-          isInSolution: true
-        })),
+        blocks: solution.map((line, index) => {
+          // Try to extract a block ID if it exists in data attributes
+          let blockId = `block-${index}`;
+
+          // Check if this is coming from a DOM element with data-block-id
+          if (typeof window !== 'undefined') {
+            const match = line.match(/data-block-id="([^"]+)"/);
+            if (match && match[1]) {
+              blockId = match[1];
+            }
+          }
+
+          return {
+            blockId: blockId,
+            position: index,
+            indentationLevel: (line.length - line.trimStart().length) / 4, // Assuming 4 spaces per indent level
+            isInSolution: true,
+          };
+        }),
         timestamp: Date.now(),
-        attemptNumber: 1
+        attemptNumber: 1,
       };
-      
+
       // Use the repository to validate
-      const validationResult = await this.solutionRepository.validate(problemId, arrangement);
-      
+      const validationResult = await this.solutionRepository.validate(
+        problemId,
+        arrangement
+      );
+
       return {
         isCorrect: validationResult.isCorrect,
-        details: validationResult.feedback.content
+        details: validationResult.feedback?.content || 'Validation completed',
       };
     } catch (error) {
       console.error('Error validating solution:', error);
       throw new Error('Failed to validate solution');
     }
+  }
+
+  /**
+   * Validate solution using the unified validation engine
+   */
+  async validateWithEngine(
+    problemSettings: ParsonsSettings,
+    userSolution: string[],
+    context?: {
+      attemptNumber?: number;
+      timeSpent?: number;
+      previousAttempts?: any[];
+    }
+  ) {
+    try {
+      // Convert legacy format to normalized format
+      const normalizedProblem =
+        this.convertToNormalizedProblem(problemSettings);
+      const normalizedSolution = this.convertToNormalizedSolution(userSolution);
+
+      // Use unified validation engine
+      const result = await validationEngine.validate({
+        problem: normalizedProblem,
+        solution: normalizedSolution,
+        context: {
+          problemId: 'current-problem',
+          attemptNumber: context?.attemptNumber || 1,
+          timeSpent: context?.timeSpent || 0,
+          previousAttempts: context?.previousAttempts || [],
+        },
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Error in validation service:', error);
+
+      // Fallback to basic validation
+      const basicResult = this.validateSolutionLocally(
+        problemSettings,
+        userSolution
+      );
+
+      return {
+        isCorrect: basicResult.isCorrect,
+        score: basicResult.isCorrect ? 100 : 50,
+        errors: [],
+        warnings: [],
+        feedback: {
+          type: basicResult.isCorrect ? 'success' : 'incorrect',
+          summary: basicResult.details,
+          details: [],
+          nextSteps: [],
+        },
+        metadata: {
+          validatedAt: new Date().toISOString(),
+          validationDuration: 0,
+          rulesApplied: ['basic'],
+          confidence: 0.5,
+          version: 'fallback',
+        },
+      };
+    }
+  }
+
+  /**
+   * Quick validation for real-time feedback
+   */
+  async quickValidate(
+    problemSettings: ParsonsSettings,
+    userSolution: string[]
+  ) {
+    try {
+      const normalizedProblem =
+        this.convertToNormalizedProblem(problemSettings);
+      const normalizedSolution = this.convertToNormalizedSolution(userSolution);
+
+      return validationEngine.quickValidate({
+        problem: normalizedProblem,
+        solution: normalizedSolution,
+        context: {
+          problemId: 'current-problem',
+          attemptNumber: 1,
+          timeSpent: 0,
+          previousAttempts: [],
+        },
+      });
+    } catch (error) {
+      console.error('Error in quick validation:', error);
+
+      // Fallback to basic validation
+      const basicResult = this.validateSolutionLocally(
+        problemSettings,
+        userSolution
+      );
+      return {
+        isCorrect: basicResult.isCorrect,
+        score: basicResult.isCorrect ? 100 : 50,
+        errors: [],
+      };
+    }
+  }
+
+  /**
+   * Helper method to convert legacy problem settings to normalized format
+   */
+  private convertToNormalizedProblem(settings: ParsonsSettings) {
+    // Temporary converter until DataModelConverter is fully implemented
+    // Will be updated in Priority 2B
+
+    // Extract correct lines and distractors
+    const lines = settings.initial.split('\n');
+    const correctSolution = [];
+    const distractors = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+
+      const isDistractor = line.includes('#distractor');
+      const indentLevel = (line.length - line.trimStart().length) / 4;
+      const content = line.trim().replace(/#(distractor|paired)\s*$/, '');
+
+      const block = {
+        id: `block-${i}`,
+        content,
+        correctPosition: i,
+        correctIndentation: indentLevel,
+        groupId: undefined,
+        dependencies: [],
+        metadata: {
+          isOptional: false,
+          alternatives: [],
+          strictOrder: true,
+          validIndentations: [indentLevel],
+          concepts: [],
+        },
+      };
+
+      if (isDistractor) {
+        distractors.push(block);
+      } else {
+        correctSolution.push(block);
+      }
+    }
+
+    return {
+      id: 'current',
+      correctSolution,
+      distractors,
+      options: {
+        strictOrder: true,
+        allowIndentationErrors: !settings.options.can_indent,
+        allowExtraSpaces: true,
+        caseSensitive: false,
+        validateSyntax: false,
+        maxScore: 100,
+        partialCredit: true,
+      },
+      metadata: {
+        language: 'python',
+        difficulty: 1,
+        estimatedTime: 15,
+        concepts: [],
+      },
+    };
+  }
+
+  /**
+   * Helper method to convert solution to normalized format
+   */
+  private convertToNormalizedSolution(solution: string[]) {
+    return {
+      blocks: solution.map((line, index) => ({
+        id: `user-block-${index}`,
+        content: line.trim(),
+        position: index,
+        indentationLevel: (line.length - line.trimStart().length) / 4,
+        isInSolution: true,
+      })),
+      timestamp: Date.now(),
+    };
   }
 
   /**
@@ -64,7 +268,7 @@ export class ValidationService {
   ): { isCorrect: boolean; details: string } {
     // Extract the correct solution lines from the problem settings
     const initialCode = settings.initial;
-    const correctLines: string[] = [];    // Process each line in the initial code, handling combined blocks
+    const correctLines: string[] = []; // Process each line in the initial code, handling combined blocks
     for (const line of initialCode.split('\n')) {
       // Skip empty lines
       if (!line.trim()) continue;
@@ -78,7 +282,9 @@ export class ValidationService {
         for (const combinedLine of combinedLines) {
           if (combinedLine.trim()) {
             // Remove #paired or #distractor comments from combined lines
-            const cleanLine = combinedLine.replace(/#(paired|distractor)\s*$/, '').trim();
+            const cleanLine = combinedLine
+              .replace(/#(paired|distractor)\s*$/, '')
+              .trim();
             if (cleanLine) {
               correctLines.push(cleanLine);
             }

@@ -39,8 +39,15 @@ class SourceCodeUpload(BaseModel):
 
 class SolutionSubmission(BaseModel):
     problemId: str
-    solution: List[str]
+    solution: List[str] = []  # Default to empty list if not provided
     solutionContext: Optional[Dict[str, Any]] = None
+    
+    @validator('solution')
+    def validate_solution(cls, v):
+        """Ensure solution is a list, even if empty"""
+        if v is None:
+            return []
+        return v
 
 class SolutionValidation(BaseModel):
     isCorrect: bool

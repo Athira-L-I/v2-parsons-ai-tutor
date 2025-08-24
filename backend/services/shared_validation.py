@@ -1,12 +1,14 @@
 from typing import Dict, List, Any, Optional
+from datetime import datetime
+from .validation_engine import validation_engine
 
 class SharedValidationService:
     """
     Centralized validation service that provides consistent validation logic
     across solution validation and feedback generation services.
     
-    This eliminates code duplication and ensures consistent behavior
-    between frontend and backend validation.
+    This version delegates to the unified validation engine for consistency
+    between frontend and backend.
     """
     
     @staticmethod
@@ -20,7 +22,8 @@ class SharedValidationService:
         Returns:
             List of correct solution lines with preserved indentation
         """
-        initial_code = problem_settings["initial"]
+        # Handle both dictionary and object access
+        initial_code = problem_settings.get("initial") if isinstance(problem_settings, dict) else problem_settings.initial
         correct_lines = []
         
         # Process each line in the initial code
@@ -109,82 +112,130 @@ class SharedValidationService:
     
     @staticmethod
     def validate_solution_complete(
-        problem_settings: Dict[str, Any], 
+        problem_settings: Dict[str, Any],
         user_solution: List[str],
         solution_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Complete solution validation with all checks.
-        
-        Args:
-            problem_settings: The ParsonsSettings of the problem
-            user_solution: The user's submitted solution as a list of code lines
-            solution_context: Optional frontend validation context
-            
-        Returns:
-            Complete validation result with all analysis
+        Complete solution validation using unified engine
         """
-        # Extract correct solution
-        correct_lines = SharedValidationService.extract_correct_lines(problem_settings)
-        
-        # Clean user solution
-        cleaned_user_solution = SharedValidationService.clean_user_solution(user_solution)
-        
-        # Initialize result
-        result = {
-            "isCorrect": False,
-            "has_solution": len(cleaned_user_solution) > 0,
-            "solution_length": len(cleaned_user_solution),
-            "expected_length": len(correct_lines),
-            "is_complete": len(cleaned_user_solution) >= len(correct_lines),
-            "completion_ratio": len(cleaned_user_solution) / max(len(correct_lines), 1),
-            "has_indentation_issues": False,
-            "indentation_errors": [],
-            "specific_issues": [],
-            "details": ""
-        }
-        
-        # Use frontend solution context if available (prioritize to avoid duplicate work)
-        if solution_context and "isCorrect" in solution_context:
-            result["isCorrect"] = solution_context["isCorrect"]
-            result["has_indentation_issues"] = solution_context.get("has_indentation_issues", False)
-            result["details"] = solution_context.get("details", "")
-            if "indentation_errors" in solution_context:
-                result["indentation_errors"] = solution_context["indentation_errors"]
-            if "specific_issues" in solution_context:
-                result["specific_issues"] = solution_context["specific_issues"]
-        else:
-            # Perform backend validation
-            is_correct = (len(cleaned_user_solution) == len(correct_lines))
-            
-            if is_correct:
-                # Check each line for both content AND indentation
-                for i, (user_line, correct_line) in enumerate(zip(cleaned_user_solution, correct_lines)):
-                    # Check content first
-                    if user_line.strip() != correct_line.strip():
-                        is_correct = False
-                        break
-                    
-                    # Check indentation
-                    user_indent = len(user_line) - len(user_line.lstrip())
-                    correct_indent = len(correct_line) - len(correct_line.lstrip())
-                    if user_indent != correct_indent:
-                        is_correct = False
-                        result["has_indentation_issues"] = True
-                        break
-            
-            # Perform detailed indentation analysis
-            indentation_analysis = SharedValidationService.check_indentation_consistency(
-                correct_lines, cleaned_user_solution
+        try:
+            # Use the unified validation engine
+            result = validation_engine.validate_solution(
+                problem_settings,
+                user_solution,
+                solution_context
             )
             
-            result["isCorrect"] = is_correct
-            result["has_indentation_issues"] = indentation_analysis["has_indentation_issues"]
-            result["indentation_errors"] = indentation_analysis["indentation_errors"]
-            result["specific_issues"].extend(indentation_analysis["specific_issues"])
-            result["details"] = "Solution is correct!" if is_correct else "Solution does not match the expected output or has incorrect indentation."
+            # Ensure these fields are always present to avoid the 'solution_length' and 'has_indentation_issues' errors
+            correct_lines = SharedValidationService.extract_correct_lines(problem_settings)
+            user_lines = SharedValidationService.clean_user_solution(user_solution)
+            
+            # Add solution length fields if missing
+            if 'solution_length' not in result:
+                # Add required fields
+                result['solution_length'] = len(user_lines)
+                result['expected_length'] = len(correct_lines)
+                result['completion_ratio'] = (
+                    result['solution_length'] / result['expected_length'] 
+                    if result['expected_length'] > 0 else 0
+                )
+                print("Added missing solution_length fields to validation result")
+            
+            # Add indentation fields if missing
+            if 'has_indentation_issues' not in result:
+                # Check indentation
+                indentation_check = SharedValidationService.check_indentation_consistency(
+                    correct_lines, user_solution
+                )
+                result['has_indentation_issues'] = indentation_check['has_indentation_issues']
+                result['indentation_errors'] = indentation_check.get('indentation_errors', [])
+                result['specific_issues'] = result.get('specific_issues', []) + indentation_check.get('specific_issues', [])
+                result['indentation_hint_count'] = len(indentation_check.get('indentation_errors', []))
+                print("Added missing indentation fields to validation result")
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in unified validation: {e}")
+            # Fallback to basic validation
+            result = SharedValidationService._basic_validation(
+                problem_settings, 
+                user_solution
+            )
+            
+            # Double check that these fields are present
+            if 'solution_length' not in result:
+                correct_lines = SharedValidationService.extract_correct_lines(problem_settings)
+                user_lines = SharedValidationService.clean_user_solution(user_solution)
+                
+                result['solution_length'] = len(user_lines)
+                result['expected_length'] = len(correct_lines)
+                result['completion_ratio'] = (
+                    result['solution_length'] / result['expected_length'] 
+                    if result['expected_length'] > 0 else 0
+                )
+                
+                print("Added missing solution_length fields to fallback validation result")
+                
+            return result
+    
+    @staticmethod
+    def _basic_validation(problem_settings: Dict[str, Any], user_solution: List[str]) -> Dict[str, Any]:
+        """
+        Basic validation fallback
+        """
+        # Extract correct lines
+        correct_lines = []
+        # Get initial code, handling both dictionary and object access
+        initial_code = (
+            problem_settings.get("initial") if isinstance(problem_settings, dict)
+            else getattr(problem_settings, "initial", "")
+        )
         
-        return result
+        for line in initial_code.split('\n'):
+            if line.strip() and '#distractor' not in line:
+                correct_lines.append(line.strip())
+        
+        # Compare with user solution
+        user_lines = [line.strip() for line in user_solution if line.strip()]
+        is_correct = correct_lines == user_lines
+        
+        # Check for indentation issues
+        indentation_analysis = SharedValidationService.check_indentation_consistency(
+            correct_lines, user_solution
+        )
+        
+        # Calculate completion ratio
+        solution_length = len(user_lines)
+        expected_length = len(correct_lines)
+        completion_ratio = solution_length / expected_length if expected_length > 0 else 0
+        
+        return {
+            "isCorrect": is_correct,
+            "score": 100 if is_correct else 50,
+            "errors": [],
+            "warnings": [],
+            "solution_length": solution_length,
+            "expected_length": expected_length,
+            "completion_ratio": completion_ratio,
+            "has_indentation_issues": indentation_analysis["has_indentation_issues"],
+            "indentation_errors": indentation_analysis["indentation_errors"],
+            "specific_issues": indentation_analysis["specific_issues"],
+            "feedback": {
+                "type": "success" if is_correct else "incorrect",
+                "summary": "Correct!" if is_correct else "Not quite right.",
+                "details": [],
+                "nextSteps": []
+            },
+            "metadata": {
+                "validatedAt": datetime.now().isoformat(),
+                "validationDuration": 0,
+                "rulesApplied": ["basic"],
+                "confidence": 0.5,
+                "version": "fallback"
+            }
+        }
     
     @staticmethod
     def analyze_programming_concepts(user_solution: List[str], correct_lines: List[str]) -> Dict[str, Any]:

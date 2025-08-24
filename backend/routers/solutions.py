@@ -16,7 +16,15 @@ async def check_solution(submission: SolutionSubmission) -> SolutionValidation:
     
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-      # Validate the solution
+    
+    # Handle case where solution might be empty
+    if not submission.solution:
+        return SolutionValidation(
+            isCorrect=False,
+            details="No solution provided"
+        )
+    
+    # Validate the solution
     try:
         result = validate_solution(
             problem["parsonsSettings"], 
@@ -25,6 +33,10 @@ async def check_solution(submission: SolutionSubmission) -> SolutionValidation:
         )
         return result
     except Exception as e:
+        import traceback
+        traceback_str = traceback.format_exc()
+        print(f"Error validating solution: {str(e)}")
+        print(traceback_str)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to validate solution: {str(e)}"

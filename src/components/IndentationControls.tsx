@@ -88,7 +88,19 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
 
   const { currentLines, expectedLines, lineToBlockMapping } =
     generateSolutionData();
-  const hints = generateIndentationHints(currentLines, expectedLines);
+  // Extract group IDs from blocks for enhanced indentation hints
+  const blockMetadata = currentSolution.reduce((metadata, block) => {
+    if (block.groupId) {
+      // Convert groupId to string if it's a number
+      const groupIdStr = typeof block.groupId === 'number' 
+        ? block.groupId.toString() 
+        : block.groupId;
+      metadata[block.id] = { groupId: groupIdStr };
+    }
+    return metadata;
+  }, {} as { [id: string]: { groupId?: string } });
+  
+  const hints = generateIndentationHints(currentLines, expectedLines, blockMetadata);
 
   // Update both context and userSolution when indentation changes
   const updateSolutionAndContext = (updatedBlocks: BlockItem[]) => {
