@@ -10,6 +10,9 @@ import {
   RequestOptions,
   ResponseMetadata,
 } from './types';
+import { ErrorFactory } from '../errors/ErrorFactory';
+import { ErrorHandler } from '../errors/ErrorHandler';
+import { ApiErrorAdapter } from '../errors/ApiErrorAdapter';
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -137,6 +140,12 @@ export class ApiClient {
             attempt: attempt + 1,
           });
         }
+        
+        // If the response indicates an error, convert it to our app error system and log it
+        if (response.data.success === false && response.data.error) {
+          const appError = ApiErrorAdapter.toAppError(response.data.error, endpoint);
+          ErrorHandler.logError(appError);
+        }
 
         return response.data;
       } catch (error) {
@@ -144,6 +153,50 @@ export class ApiClient {
         lastError = typedError;
         const processingTime = Date.now() - startTime;
 
+        // Create an error for logging purposes
+        let appError;
+        if (axios.isAxiosError(typedError)) {
+          // Determine network error type
+          let networkType: 'offline' | 'timeout' | 'server_error' | 'rate_limit' = 'server_error';
+          
+          if (typedError.code === 'ECONNABORTED') {
+            networkType = 'timeout';
+          } else if (typedError.code === 'ERR_NETWORK') {
+            networkType = 'offline';
+          } else if (typedError.response?.status === 429) {
+            networkType = 'rate_limit';
+          }
+          
+          appError = ErrorFactory.createNetworkError(
+            networkType, 
+            typedError,
+            { 
+              additionalData: { 
+                endpoint,
+                attempt: attempt + 1,
+                processingTime,
+                maxRetries
+              } 
+            }
+          );
+        } else {
+          appError = ErrorFactory.createApplicationError(
+            typedError.message,
+            typedError,
+            { 
+              additionalData: { 
+                endpoint,
+                attempt: attempt + 1,
+                processingTime
+              } 
+            }
+          );
+        }
+        
+        // Log the error using our central error handler
+        ErrorHandler.logError(appError);
+        
+        // Also log to console for development visibility
         console.error(
           `❌ API Request Failed [${requestId}] Attempt ${attempt + 1}:`,
           {
@@ -256,18 +309,23 @@ export class ApiClient {
    * Convert any error to standard API error format
    */
   private convertToApiError(error: Error, requestId: string): ApiError {
+    // First create an AppError using the error factory
+    let appError;
+
     if (axios.isAxiosError(error)) {
       const axiosError = error;
+      const endpoint = axiosError.config?.url || '';
 
-      // Network error
+      // Network error (no response)
       if (!axiosError.response) {
-        return {
-          code: ApiErrorCode.SERVICE_UNAVAILABLE,
-          message: 'Network error or service unavailable',
-          details: { originalError: axiosError.message },
-          timestamp: new Date().toISOString(),
-          requestId,
-        };
+        appError = ErrorFactory.createNetworkError('server_error', axiosError);
+        // Add endpoint to context
+        if (appError.context.additionalData) {
+          appError.context.additionalData.endpoint = endpoint;
+        }
+        
+        // Convert to API format
+        return ApiErrorAdapter.toApiError(appError);
       }
 
       // Server returned an error response
@@ -276,6 +334,7 @@ export class ApiClient {
 
       // Try to extract error from response
       if (response.data?.error) {
+        // If the API returned an error in the expected format, use it directly
         const responseError = response.data.error;
         return {
           code: responseError.code || this.getErrorCodeForStatus(status),
@@ -292,27 +351,41 @@ export class ApiClient {
 
       // Create error based on status code
       const errorCode = this.getErrorCodeForStatus(status);
-      return {
-        code: errorCode,
-        message: this.getMessageForErrorCode(errorCode),
-        details: {
+      
+      // Create appropriate network error type based on status
+      let networkType: 'offline' | 'timeout' | 'server_error' | 'rate_limit' = 'server_error';
+      
+      if (status === 429) {
+        networkType = 'rate_limit';
+      } else if (status === 504) {
+        networkType = 'timeout';
+      }
+      
+      appError = ErrorFactory.createNetworkError(networkType, axiosError, {
+        additionalData: {
+          endpoint,
           status,
           statusText: response.statusText,
           data: response.data,
-        },
-        timestamp: new Date().toISOString(),
-        requestId,
-      };
+        }
+      });
+      
+      // Convert to API format and augment with specific API error details
+      const apiError = ApiErrorAdapter.toApiError(appError);
+      apiError.code = errorCode;
+      apiError.message = this.getMessageForErrorCode(errorCode);
+      
+      return apiError;
     }
 
-    // Generic error
-    return {
-      code: ApiErrorCode.INTERNAL_ERROR,
-      message: error.message || 'Unknown error',
-      details: { originalError: error.toString() },
-      timestamp: new Date().toISOString(),
-      requestId,
-    };
+    // For non-axios errors, create a generic application error
+    appError = ErrorFactory.createApplicationError(error.message || 'Unknown API client error', error);
+    
+    // Log the error using our central error handler
+    ErrorHandler.logError(appError);
+    
+    // Convert to API error format
+    return ApiErrorAdapter.toApiError(appError);
   }
 
   /**
