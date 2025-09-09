@@ -1,5 +1,5 @@
 /**
- * Standardized Problem API service
+ * Standardized Problem API service with error handling
  * All problem-related API calls go through this service
  */
 
@@ -12,9 +12,13 @@ import {
   RequestOptions,
 } from '../types';
 import { ParsonsSettings } from '@/@types/types';
+import { BaseApiService } from './BaseApiService';
+import { ErrorFactory } from '@/errors/index';
 
-export class ProblemApiService {
-  private readonly basePath = '/api/problems';
+export class ProblemApiService extends BaseApiService {
+  constructor() {
+    super('ProblemApiService', '/api/problems');
+  }
 
   /**
    * Get all problems with pagination and filtering
@@ -47,34 +51,59 @@ export class ProblemApiService {
   }
 
   /**
-   * Get a specific problem by ID
+   * Get a specific problem by ID with error handling
    */
   async getProblem(
     id: string,
     options: RequestOptions = {}
-  ): Promise<ApiResponse<ProblemResponse>> {
+  ): Promise<ProblemResponse | undefined> {
     if (!id || typeof id !== 'string') {
-      throw new Error('Problem ID is required and must be a string');
+      this.handleValidationError('Problem ID is required and must be a string', 'id');
     }
 
-    return apiClient.get<ProblemResponse>(
+    return this.executeRequest<ProblemResponse>(
+      () => this.apiClient.get<ProblemResponse>(
+        `${this.basePath}/${id}`,
+        undefined,
+        options
+      ),
       `${this.basePath}/${id}`,
-      undefined,
-      options
+      'getProblem'
     );
   }
 
   /**
-   * Create a new problem
+   * Create a new problem with error handling
    */
   async createProblem(
     request: CreateProblemRequest,
     options: RequestOptions = {}
-  ): Promise<ApiResponse<ProblemResponse>> {
-    // Validate request
-    this.validateCreateProblemRequest(request);
+  ): Promise<ProblemResponse | undefined> {
+    try {
+      // Validate request
+      this.validateCreateProblemRequest(request);
 
-    return apiClient.post<ProblemResponse>(this.basePath, request, options);
+      return this.executeRequest<ProblemResponse>(
+        () => this.apiClient.post<ProblemResponse>(
+          this.basePath,
+          request,
+          options
+        ),
+        `${this.basePath}`,
+        'createProblem'
+      );
+    } catch (error) {
+      // Rethrow validation errors
+      if (error && typeof error === 'object' && 'category' in error && error.category === 'validation') {
+        throw error;
+      }
+      
+      // Convert to application error
+      throw ErrorFactory.createApplicationError(
+        `Failed to create problem: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
   }
 
   /**

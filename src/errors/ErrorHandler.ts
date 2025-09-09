@@ -255,4 +255,28 @@ export class ErrorHandler {
     //   console.error('Failed to send error to logging service', e);
     // }
   }
+  
+  /**
+   * Show a notification for an error
+   * This is a simple implementation that could be enhanced with a toast library
+   */
+  static showErrorNotification(error: AppError): void {
+    // In a real app, you'd use a toast library or custom notification system
+    // This is a simple console-based implementation
+    const { title, description } = this.getErrorDisplayInfo(error);
+    
+    console.error(`%c${title}%c\n${description}`, 
+      'color: white; background: red; font-weight: bold; padding: 2px 4px; border-radius: 2px;', 
+      'color: red; font-weight: normal;'
+    );
+    
+    // Example toast implementation:
+    // if (typeof window !== 'undefined' && window.toast) {
+    //   window.toast.error(description, {
+    //     title,
+    //     duration: 5000,
+    //     position: 'top-right',
+    //   });
+    // }
+  }
 }
