@@ -29,8 +29,8 @@ export const DEPENDENCY_MANIFEST: Record<string, DependencyDefinition> = {
       url: 'https://code.jquery.com/jquery-3.6.0.min.js',
       fallback: {
         type: 'local',
-        url: '/js/vendor/jquery.min.js'
-      }
+        url: '/js/vendor/jquery.min.js',
+      },
     },
     required: true,
     loadCondition: () => typeof window !== 'undefined',
@@ -44,8 +44,8 @@ export const DEPENDENCY_MANIFEST: Record<string, DependencyDefinition> = {
       url: 'https://code.jquery.com/ui/1.13.2/jquery-ui.min.js',
       fallback: {
         type: 'local',
-        url: '/js/vendor/jquery-ui.min.js'
-      }
+        url: '/js/vendor/jquery-ui.min.js',
+      },
     },
     required: true,
     dependencies: ['jquery'],
@@ -59,8 +59,8 @@ export const DEPENDENCY_MANIFEST: Record<string, DependencyDefinition> = {
       url: 'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
       fallback: {
         type: 'local',
-        url: '/js/vendor/lodash.min.js'
-      }
+        url: '/js/vendor/lodash.min.js',
+      },
     },
     required: true,
     dependencies: ['jquery'],
@@ -71,7 +71,7 @@ export const DEPENDENCY_MANIFEST: Record<string, DependencyDefinition> = {
     version: '1.0.0',
     source: {
       type: 'local',
-      url: '/js/lis.js'
+      url: '/js/lis.js',
     },
     required: true,
     dependencies: ['jquery', 'jqueryui', 'lodash'],
@@ -82,7 +82,7 @@ export const DEPENDENCY_MANIFEST: Record<string, DependencyDefinition> = {
     version: '1.0.0',
     source: {
       type: 'local',
-      url: '/js/parsons.js'
+      url: '/js/parsons.js',
     },
     required: true,
     dependencies: ['jquery', 'jqueryui', 'lodash', 'lis'],

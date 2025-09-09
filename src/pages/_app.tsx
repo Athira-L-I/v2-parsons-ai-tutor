@@ -11,9 +11,9 @@ export default function App({ Component, pageProps }: AppProps) {
   // Preload dependencies when app starts
   useEffect(() => {
     console.log('🚀 Preloading dependencies...');
-    
+
     // Start loading dependencies in background
-    dependencyLoader.loadAll().then(result => {
+    dependencyLoader.loadAll().then((result) => {
       if (result.success) {
         console.log('✅ Dependencies preloaded successfully');
       } else {
@@ -21,7 +21,7 @@ export default function App({ Component, pageProps }: AppProps) {
       }
     });
   }, []);
-  
+
   return (
     <ParsonsProviders>
       <Layout>

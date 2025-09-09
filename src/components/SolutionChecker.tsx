@@ -52,7 +52,8 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
         .filter((line: string) => line.trim() && !line.includes('#distractor'));
 
       const currentLines: string[] = [];
-      const expectedLines: string[] = [];      currentBlocks.forEach((block: any) => {
+      const expectedLines: string[] = [];
+      currentBlocks.forEach((block: any) => {
         if (block.isCombined && block.subLines) {
           block.subLines.forEach((subLine: string) => {
             const subLineRelativeIndent = Math.floor(
@@ -67,7 +68,7 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
             const matchingExpectedLine = allCorrectLines.find(
               (expectedLine: string) => expectedLine.trim() === cleanSubLine
             );
-            
+
             if (matchingExpectedLine) {
               // Use the original indented line from the correct solution
               expectedLines.push(matchingExpectedLine);
@@ -75,7 +76,9 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
               // Fallback: create properly indented line based on the original subLine structure
               // If the subLine already has indentation, preserve it; otherwise use the current structure
               const originalIndent = subLine.match(/^(\s*)/)?.[1] || '';
-              const fallbackLine = originalIndent ? subLine : `${indentString}${cleanSubLine}`;
+              const fallbackLine = originalIndent
+                ? subLine
+                : `${indentString}${cleanSubLine}`;
               expectedLines.push(fallbackLine);
             }
           });
@@ -86,22 +89,28 @@ const SolutionChecker: React.FC<SolutionCheckerProps> = ({
           const matchingExpectedLine = allCorrectLines.find(
             (expectedLine: string) => expectedLine.trim() === block.text.trim()
           );
-          expectedLines.push(matchingExpectedLine || `${indentString}${block.text}`);
+          expectedLines.push(
+            matchingExpectedLine || `${indentString}${block.text}`
+          );
         }
       });
 
       // Extract group IDs for enhanced indentation hints
-      const blockMetadata = currentBlocks.reduce((metadata: { [id: string]: { groupId?: string } }, block: any) => {
-        if (block.groupId) {
-          // Convert groupId to string if it's a number
-          const groupIdStr = typeof block.groupId === 'number' 
-            ? block.groupId.toString() 
-            : block.groupId;
-          metadata[block.id] = { groupId: groupIdStr };
-        }
-        return metadata;
-      }, {} as { [id: string]: { groupId?: string } });
-      
+      const blockMetadata = currentBlocks.reduce(
+        (metadata: { [id: string]: { groupId?: string } }, block: any) => {
+          if (block.groupId) {
+            // Convert groupId to string if it's a number
+            const groupIdStr =
+              typeof block.groupId === 'number'
+                ? block.groupId.toString()
+                : block.groupId;
+            metadata[block.id] = { groupId: groupIdStr };
+          }
+          return metadata;
+        },
+        {} as { [id: string]: { groupId?: string } }
+      );
+
       const indentationHints = generateIndentationHints(
         currentLines,
         expectedLines,

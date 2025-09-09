@@ -94,19 +94,23 @@ const ChatFeedbackPanel: React.FC = () => {
   };
 
   const { currentLines, expectedLines } = generateSolutionData();
-  
+
   // Extract group IDs for enhanced indentation hints
-  const blockMetadata = currentBlocks.reduce((metadata: { [id: string]: { groupId?: string } }, block: any) => {
-    if (block.groupId) {
-      // Convert groupId to string if it's a number
-      const groupIdStr = typeof block.groupId === 'number' 
-        ? block.groupId.toString() 
-        : block.groupId;
-      metadata[block.id] = { groupId: groupIdStr };
-    }
-    return metadata;
-  }, {} as { [id: string]: { groupId?: string } });
-  
+  const blockMetadata = currentBlocks.reduce(
+    (metadata: { [id: string]: { groupId?: string } }, block: any) => {
+      if (block.groupId) {
+        // Convert groupId to string if it's a number
+        const groupIdStr =
+          typeof block.groupId === 'number'
+            ? block.groupId.toString()
+            : block.groupId;
+        metadata[block.id] = { groupId: groupIdStr };
+      }
+      return metadata;
+    },
+    {} as { [id: string]: { groupId?: string } }
+  );
+
   const indentationHints = generateIndentationHints(
     currentLines,
     expectedLines,
@@ -227,19 +231,24 @@ const ChatFeedbackPanel: React.FC = () => {
       // TODO: Implement a proper ChatRepository and use it here
       // For now we'll use the fetch API directly
       // This will be replaced with a repository call in the future
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/chat/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          problemId: problemId || 'no-id',
-          message: messageContent,
-          chatHistory: chatMessages.filter((msg) => !msg.isTyping),
-          currentSolution: currentLines,
-          solutionContext
-        }),
-      }).then(res => res.json());
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        }/api/chat/message`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            problemId: problemId || 'no-id',
+            message: messageContent,
+            chatHistory: chatMessages.filter((msg) => !msg.isTyping),
+            currentSolution: currentLines,
+            solutionContext,
+          }),
+        }
+      ).then((res) => res.json());
 
       console.log('📥 Received chat response:', {
         success: response.success,

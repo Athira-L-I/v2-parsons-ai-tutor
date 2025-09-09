@@ -1,10 +1,10 @@
 // src/lib/adaptiveFeatures.ts - Complete implementation
 import { ParsonsSettings } from '@/@types/types';
-import { 
-  expandCombinedBlocks, 
-  getIndentLevel, 
-  isControlStructure, 
-  validateGroupIndentationRelationships 
+import {
+  expandCombinedBlocks,
+  getIndentLevel,
+  isControlStructure,
+  validateGroupIndentationRelationships,
 } from './indentationUtils';
 
 export interface AdaptiveState {
@@ -488,7 +488,7 @@ export function generateIndentationHints(
 
   // Create a mapping of content to expected indentation and group info
   const correctBlockMap = new Map<string, BlockInfo>();
-  
+
   // First pass - collect all block info
   expandedCorrectSolution.forEach((line, index) => {
     const content = line.trim();
@@ -499,7 +499,7 @@ export function generateIndentationHints(
         indent: getIndentLevel(line),
         groupId,
         index,
-        isInGroup: !!groupId
+        isInGroup: !!groupId,
       });
     }
   });
@@ -535,7 +535,8 @@ export function generateIndentationHints(
 
       // Add context-specific hints based on code content and group awareness
       if (isInGroup) {
-        hint += ' This line is part of a multi-line block that should maintain consistent indentation.';
+        hint +=
+          ' This line is part of a multi-line block that should maintain consistent indentation.';
       } else if (studentContent.endsWith(':')) {
         hint += ' Lines ending with ":" introduce new code blocks.';
       } else if (studentContent.startsWith('return ')) {
@@ -567,27 +568,29 @@ export function generateIndentationHints(
   if (blockMetadata) {
     // Group blocks by groupId
     const groupedBlocks = new Map<string, BlockInfo[]>();
-    
+
     // Find blocks in the student solution with their line indices
     const studentBlocks: BlockInfo[] = [];
-    
+
     correctBlockMap.forEach((blockInfo, content) => {
       if (blockInfo.groupId) {
         // Find this block in the student solution
         const studentIndex = expandedStudentSolution.findIndex(
-          line => line.trim() === content
+          (line) => line.trim() === content
         );
-        
+
         if (studentIndex !== -1) {
           const studentBlock = {
             ...blockInfo,
             lineIndex: studentIndex,
             // Add the actual indentation in the student solution
-            studentIndent: getIndentLevel(expandedStudentSolution[studentIndex])
+            studentIndent: getIndentLevel(
+              expandedStudentSolution[studentIndex]
+            ),
           };
-          
+
           studentBlocks.push(studentBlock);
-          
+
           // Group by groupId
           if (!groupedBlocks.has(blockInfo.groupId!)) {
             groupedBlocks.set(blockInfo.groupId!, []);
@@ -596,12 +599,12 @@ export function generateIndentationHints(
         }
       }
     });
-    
+
     // Sort each group by original index
-    groupedBlocks.forEach(blocks => {
+    groupedBlocks.forEach((blocks) => {
       blocks.sort((a, b) => (a.index || 0) - (b.index || 0));
     });
-    
+
     // Use shared validation logic
     const issues = validateGroupIndentationRelationships(
       groupedBlocks,
@@ -609,24 +612,28 @@ export function generateIndentationHints(
       (block) => block.content, // block identifier
       true // include line indices
     );
-    
+
     // Convert issues to hints
-    issues.forEach(issue => {
+    issues.forEach((issue) => {
       if (issue.lineIndex !== undefined) {
         // Only add this hint if we haven't already flagged this line
         const alreadyHasHint = hints.some(
-          h => h.lineIndex === issue.lineIndex
+          (h) => h.lineIndex === issue.lineIndex
         );
-        
+
         if (!alreadyHasHint) {
           // Find the block to get its current and expected indentation
-          const block = studentBlocks.find(b => b.content === issue.blockId);
+          const block = studentBlocks.find((b) => b.content === issue.blockId);
           if (block) {
             hints.push({
               lineIndex: issue.lineIndex,
               currentIndent: block.studentIndent || 0,
               expectedIndent: block.indent,
-              hint: `This line should have a relative indentation of ${issue.expectedDiff > 0 ? '+' : ''}${issue.expectedDiff} compared to the previous line in this block.`
+              hint: `This line should have a relative indentation of ${
+                issue.expectedDiff > 0 ? '+' : ''
+              }${
+                issue.expectedDiff
+              } compared to the previous line in this block.`,
             });
           }
         }

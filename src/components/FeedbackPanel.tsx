@@ -70,19 +70,23 @@ const FeedbackPanel: React.FC = () => {
   };
 
   const { currentLines, expectedLines } = generateSolutionData();
-  
+
   // Extract group IDs for enhanced indentation hints
-  const blockMetadata = currentBlocks.reduce((metadata: { [id: string]: { groupId?: string } }, block: any) => {
-    if (block.groupId) {
-      // Convert groupId to string if it's a number
-      const groupIdStr = typeof block.groupId === 'number' 
-        ? block.groupId.toString() 
-        : block.groupId;
-      metadata[block.id] = { groupId: groupIdStr };
-    }
-    return metadata;
-  }, {} as { [id: string]: { groupId?: string } });
-  
+  const blockMetadata = currentBlocks.reduce(
+    (metadata: { [id: string]: { groupId?: string } }, block: any) => {
+      if (block.groupId) {
+        // Convert groupId to string if it's a number
+        const groupIdStr =
+          typeof block.groupId === 'number'
+            ? block.groupId.toString()
+            : block.groupId;
+        metadata[block.id] = { groupId: groupIdStr };
+      }
+      return metadata;
+    },
+    {} as { [id: string]: { groupId?: string } }
+  );
+
   const indentationHints = generateIndentationHints(
     currentLines,
     expectedLines,

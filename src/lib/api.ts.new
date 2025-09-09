@@ -1,11 +1,11 @@
-import {
-  problemApiService,
-  solutionApiService,
+import { 
+  problemApiService, 
+  solutionApiService, 
   feedbackApiService,
   ApiErrorCode,
   ApiResponse,
   ValidateSolutionRequest,
-  GenerateFeedbackRequest,
+  GenerateFeedbackRequest
 } from '@/api';
 
 import { ParsonsSettings, ChatMessage } from '@/@types/types';
@@ -32,13 +32,13 @@ interface ChatFeedbackResponse {
 export const fetchProblems = async () => {
   try {
     const response = await problemApiService.getAllProblems({ limit: 100 });
-
+    
     if (!response.success) {
       throw new Error(response.error?.message || 'Failed to fetch problems');
     }
 
     // Convert to the expected format
-    const validatedProblems = response.data?.items.map((problem) => ({
+    const validatedProblems = response.data?.items.map(problem => ({
       id: problem.id,
       title: problem.title,
       description: problem.description || '',
@@ -53,11 +53,7 @@ export const fetchProblems = async () => {
     return validatedProblems;
   } catch (error) {
     console.error('Error fetching problems:', error);
-    throw new Error(
-      `Failed to fetch problems: ${
-        error instanceof Error ? error.message : 'Unknown error'
-      }`
-    );
+    throw new Error(`Failed to fetch problems: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -66,7 +62,7 @@ export const fetchProblemById = async (id: string) => {
   if (!id || typeof id !== 'string') {
     throw new Error('Invalid problem ID provided');
   }
-
+  
   return getProblem(id);
 };
 
@@ -99,20 +95,14 @@ export const getProblem = async (id: string) => {
 
   try {
     const response = await problemApiService.getProblem(id);
-
+    
     if (!response.success) {
-      throw new Error(
-        response.error?.message || `Failed to fetch problem with ID: ${id}`
-      );
+      throw new Error(response.error?.message || `Failed to fetch problem with ID: ${id}`);
     }
 
     const problem = response.data;
-
+    
     // Convert to the expected format
-    if (!problem) {
-      throw new Error(`Problem data is missing for ID: ${id}`);
-    }
-
     return {
       id: problem.id,
       title: problem.title,
@@ -125,11 +115,7 @@ export const getProblem = async (id: string) => {
     };
   } catch (error) {
     console.error(`Error fetching problem ${id}:`, error);
-    throw new Error(
-      `Failed to fetch problem with ID: ${id}: ${
-        error instanceof Error ? error.message : 'Unknown error'
-      }`
-    );
+    throw new Error(`Failed to fetch problem with ID: ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -153,67 +139,50 @@ export const checkSolution = async (problemId: string, solution: string[]) => {
       solution: solution.filter((line) => typeof line === 'string'),
       context: {
         attemptNumber: 1,
-        timeSpent: 0,
-      },
+        timeSpent: 0
+      }
     };
-
+    
     const response = await solutionApiService.validateSolution(request);
-
+    
     if (!response.success) {
       // If it's a network error or server is down, provide local fallback
       if (response.error?.code === ApiErrorCode.SERVICE_UNAVAILABLE) {
-        console.warn(
-          'Server unavailable, attempting local validation fallback'
-        );
+        console.warn('Server unavailable, attempting local validation fallback');
         try {
           const localResult = await checkSolutionLocally(problemId, solution);
           return localResult;
         } catch (localError) {
           console.error('Local validation also failed:', localError);
-          throw new Error(
-            'Unable to validate solution: Server unavailable and local validation failed'
-          );
+          throw new Error('Unable to validate solution: Server unavailable and local validation failed');
         }
       }
-
+      
       throw new Error(response.error?.message || 'Failed to validate solution');
     }
 
     const result = response.data;
-
-    if (!result) {
-      throw new Error('Validation result is missing');
-    }
-
+    
     // Convert to the expected format
     return {
       isCorrect: result.isCorrect,
-      details: result.feedback?.message || 'No details provided',
+      details: result.feedback.message || 'No details provided',
     };
   } catch (error) {
     console.error('Error checking solution:', error);
-
-    if (
-      error instanceof Error &&
-      error.message.includes('Server unavailable')
-    ) {
+    
+    if (error instanceof Error && error.message.includes('Server unavailable')) {
       console.warn('Server unavailable, attempting local validation fallback');
       try {
         const localResult = await checkSolutionLocally(problemId, solution);
         return localResult;
       } catch (localError) {
         console.error('Local validation also failed:', localError);
-        throw new Error(
-          'Unable to validate solution: Server unavailable and local validation failed'
-        );
+        throw new Error('Unable to validate solution: Server unavailable and local validation failed');
       }
     }
-
-    throw new Error(
-      `Failed to validate solution: ${
-        error instanceof Error ? error.message : 'Unknown error'
-      }`
-    );
+    
+    throw new Error(`Failed to validate solution: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -276,39 +245,35 @@ export const generateFeedback = async (
       problemId: problemId.trim(),
       currentSolution: solution.filter((line) => typeof line === 'string'),
     };
-
+    
     const response = await feedbackApiService.generateFeedback(request);
-
+    
     if (!response.success) {
       // If server is unavailable or has errors, provide local fallback
-      if (
-        response.error?.code === ApiErrorCode.SERVICE_UNAVAILABLE ||
-        response.error?.code === ApiErrorCode.INTERNAL_ERROR
-      ) {
+      if (response.error?.code === ApiErrorCode.SERVICE_UNAVAILABLE || 
+          response.error?.code === ApiErrorCode.INTERNAL_ERROR) {
         console.warn('Server unavailable, generating local fallback feedback');
         return generateLocalFallbackFeedback(solution);
       }
-
+      
       // If problem not found
-      if (
-        response.error?.code === ApiErrorCode.NOT_FOUND ||
-        response.error?.code === ApiErrorCode.PROBLEM_NOT_FOUND
-      ) {
+      if (response.error?.code === ApiErrorCode.NOT_FOUND || 
+          response.error?.code === ApiErrorCode.PROBLEM_NOT_FOUND) {
         return 'Problem not found. Please try refreshing the page or selecting a different problem.';
       }
-
+      
       // For other API errors, use the error message or fallback
       if (response.error?.message) {
         return `Unable to generate personalized feedback: ${response.error.message}. Please try again later.`;
       }
-
+      
       // Final fallback
       return generateLocalFallbackFeedback(solution);
     }
 
     return response.data?.feedback.content || 'No feedback available';
-  } catch (err) {
-    console.error('Error generating feedback:', err);
+  } catch (error) {
+    console.error('Error generating feedback:', error);
 
     // For all errors, generate local fallback
     return generateLocalFallbackFeedback(solution);
@@ -362,22 +327,16 @@ const generateLocalFallbackFeedback = (solution: string[]): string => {
 
 export const generateProblem = async (sourceCode: string) => {
   try {
-    const response = await problemApiService.generateProblemFromCode(
-      sourceCode
-    );
-
+    const response = await problemApiService.generateProblemFromCode(sourceCode);
+    
     if (!response.success) {
       throw new Error(response.error?.message || 'Failed to generate problem');
     }
-
+    
     return response.data;
   } catch (error) {
     console.error('Error generating problem:', error);
-    throw new Error(
-      `Failed to generate problem: ${
-        error instanceof Error ? error.message : 'Unknown error'
-      }`
-    );
+    throw new Error(`Failed to generate problem: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -388,7 +347,7 @@ export const sendChatMessage = async (
   currentSolution: string[],
   solutionContext?: {
     isCorrect: boolean | null;
-    indentationHints: unknown[];
+    indentationHints: any[];
     solutionStatus: string;
   }
 ) => {
@@ -421,14 +380,12 @@ export const sendChatMessage = async (
 
     const request: GenerateFeedbackRequest = {
       problemId: problemId.trim(),
-      currentSolution: currentSolution.filter(
-        (line) => typeof line === 'string'
-      ),
+      currentSolution: currentSolution.filter((line) => typeof line === 'string'),
       chatHistory: serializedChatHistory,
       context: {
         attempts: 1,
         timeSpent: 0,
-      },
+      }
     };
 
     console.log('📤 Sending chat message:', {
@@ -458,23 +415,17 @@ export const sendChatMessage = async (
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error(
-          'Problem not found. Please try refreshing the page or selecting a different problem.'
-        );
+        throw new Error('Problem not found. Please try refreshing the page or selecting a different problem.');
       }
-
+      
       if (response.status === 400) {
         const errorData = await response.json();
-        throw new Error(
-          `Request error: ${
-            errorData.detail || errorData.message || 'Invalid request format'
-          }`
-        );
+        throw new Error(`Request error: ${errorData.detail || errorData.message || 'Invalid request format'}`);
       }
-
+      
       if (response.status >= 500) {
         console.warn('🔧 Server error, providing fallback response');
-
+        
         return {
           success: false,
           message: 'Server error - fallback response provided',
@@ -487,12 +438,12 @@ export const sendChatMessage = async (
           },
         };
       }
-
+      
       throw new Error(`Failed to send message: HTTP ${response.status}`);
     }
 
     const result = await response.json();
-
+    
     // Ensure required fields exist with proper defaults
     const validatedResult: ChatFeedbackResponse = {
       success: Boolean(result.success),
@@ -530,7 +481,7 @@ export const sendChatMessage = async (
     return validatedResult;
   } catch (error) {
     console.error('❌ Error sending chat message:', error);
-
+    
     // Handle network errors
     if (error instanceof Error && error.message.includes('fetch failed')) {
       // Network error - server unavailable
@@ -549,18 +500,14 @@ export const sendChatMessage = async (
       };
     }
 
-    throw new Error(
-      `Failed to send message: ${
-        error instanceof Error ? error.message : 'Unknown error'
-      }`
-    );
+    throw new Error(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
 // Helper function for offline responses
 const generateOfflineChatResponse = (
   message: string,
-  solution: string[]
+  userSolution: string[]
 ): string => {
   const messageLower = message.toLowerCase();
 
@@ -576,7 +523,7 @@ const generateOfflineChatResponse = (
     return "I'm currently offline, but here's some guidance: start by identifying what your program is supposed to do, then think about the first step. Look for variable declarations or function definitions that might need to come first.";
   }
 
-  if (solution.length === 0) {
+  if (userSolution.length === 0) {
     return "I'm currently offline, but I can suggest starting by dragging some code blocks to the solution area. Try to think about what should happen first in the program!";
   }
 
@@ -586,7 +533,7 @@ const generateOfflineChatResponse = (
 // Helper function for server error fallbacks
 const generateFallbackChatResponse = (
   message: string,
-  solution: string[]
+  userSolution: string[]
 ): string => {
   const messageLower = message.toLowerCase();
 

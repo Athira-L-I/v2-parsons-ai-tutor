@@ -17,7 +17,7 @@ export class DependencyPreloader {
     console.log('🚀 Starting dependency preloading...');
 
     // Start loading immediately
-    dependencyLoader.loadAll().then(result => {
+    dependencyLoader.loadAll().then((result) => {
       if (result.success) {
         console.log('✅ Dependencies preloaded successfully');
         // Dispatch event for components that might be waiting
@@ -34,7 +34,7 @@ export class DependencyPreloader {
   async waitForDependencies(): Promise<boolean> {
     return new Promise((resolve) => {
       const status = dependencyLoader.getStatus();
-      
+
       if (status.loaded.includes('parsonsWidget')) {
         resolve(true);
         return;

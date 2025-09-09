@@ -4,7 +4,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { dependencyLoader, LoadingResult } from '@/dependencies/DependencyLoader';
+import {
+  dependencyLoader,
+  LoadingResult,
+} from '@/dependencies/DependencyLoader';
 
 export interface DependencyStatus {
   isLoading: boolean;
@@ -30,9 +33,9 @@ export function useDependencies(): DependencyStatus {
     try {
       console.log('🔄 Loading dependencies via hook...');
       const loadResult = await dependencyLoader.loadAll();
-      
+
       setResult(loadResult);
-      
+
       if (loadResult.success) {
         setIsLoaded(true);
         console.log('✅ All dependencies loaded successfully');
@@ -75,7 +78,9 @@ export function useDependencies(): DependencyStatus {
 /**
  * Hook for loading specific dependencies
  */
-export function useSpecificDependencies(dependencies: string[]): DependencyStatus {
+export function useSpecificDependencies(
+  dependencies: string[]
+): DependencyStatus {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -97,7 +102,7 @@ export function useSpecificDependencies(dependencies: string[]): DependencyStatu
         loaded: dependencies,
         failed: [],
         errors: [],
-        duration: 0
+        duration: 0,
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -108,7 +113,7 @@ export function useSpecificDependencies(dependencies: string[]): DependencyStatu
         loaded: [],
         failed: dependencies,
         errors: [errorMessage],
-        duration: 0
+        duration: 0,
       });
     } finally {
       setIsLoading(false);
@@ -146,9 +151,10 @@ export function useDependencyStatus() {
   useEffect(() => {
     const checkStatus = () => {
       const currentStatus = dependencyLoader.getStatus();
-      const ready = currentStatus.loaded.includes('parsonsWidget') && 
-                   currentStatus.loading.length === 0;
-      
+      const ready =
+        currentStatus.loaded.includes('parsonsWidget') &&
+        currentStatus.loading.length === 0;
+
       setStatus({
         ...currentStatus,
         ready,

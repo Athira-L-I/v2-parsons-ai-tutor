@@ -35,11 +35,11 @@ export const DependencyDebug: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
-    const updateStatus = () => {      
+    const updateStatus = () => {
       // Use safe type assertions to prevent runtime errors
       const jquery = window.$ as JQuery;
       const lodash = window._ as Lodash;
-      
+
       setDetailedStatus({
         loader: dependencyLoader.getStatus(),
         window: {
@@ -69,16 +69,16 @@ export const DependencyDebug: React.FC = () => {
   return (
     <div className="dependency-debug fixed bottom-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-lg text-xs max-w-md">
       <h4 className="font-bold mb-2">Dependencies Debug</h4>
-      
+
       <div className="space-y-2">
         <div>
           <strong>Status:</strong> {status.ready ? '✅ Ready' : '⏳ Loading'}
         </div>
-        
+
         <div>
           <strong>Loaded:</strong> {status.loaded.join(', ') || 'none'}
         </div>
-        
+
         <div>
           <strong>Loading:</strong> {status.loading.join(', ') || 'none'}
         </div>
@@ -89,10 +89,15 @@ export const DependencyDebug: React.FC = () => {
               <strong>Window Objects:</strong>
               <ul className="ml-2">
                 <li>jQuery: {detailedStatus.window.jquery ? '✅' : '❌'}</li>
-                <li>jQuery UI: {detailedStatus.window.jqueryui ? '✅' : '❌'}</li>
+                <li>
+                  jQuery UI: {detailedStatus.window.jqueryui ? '✅' : '❌'}
+                </li>
                 <li>Lodash: {detailedStatus.window.lodash ? '✅' : '❌'}</li>
                 <li>LIS: {detailedStatus.window.lis ? '✅' : '❌'}</li>
-                <li>ParsonsWidget: {detailedStatus.window.parsonsWidget ? '✅' : '❌'}</li>
+                <li>
+                  ParsonsWidget:{' '}
+                  {detailedStatus.window.parsonsWidget ? '✅' : '❌'}
+                </li>
               </ul>
             </div>
 

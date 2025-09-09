@@ -3,7 +3,12 @@
  * Replaces the complex parsonsLoader.ts
  */
 
-import { DependencyDefinition, DependencySource, DEPENDENCY_MANIFEST, CSS_DEPENDENCIES } from './manifest';
+import {
+  DependencyDefinition,
+  DependencySource,
+  DEPENDENCY_MANIFEST,
+  CSS_DEPENDENCIES,
+} from './manifest';
 
 export interface LoadingOptions {
   timeout?: number;
@@ -65,11 +70,12 @@ export class DependencyLoader {
           result.loaded.push(depName);
           console.log(`✅ Loaded: ${depName}`);
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           result.failed.push(depName);
           result.errors.push(`${depName}: ${errorMessage}`);
           console.error(`❌ Failed to load: ${depName}`, error);
-          
+
           // If this is a required dependency, fail the whole process
           const dep = DEPENDENCY_MANIFEST[depName];
           if (dep?.required) {
@@ -84,15 +90,17 @@ export class DependencyLoader {
         result.success = false;
         result.errors.push(...verificationResult.errors);
       }
-
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       result.success = false;
       result.errors.push(`Loading process failed: ${errorMessage}`);
     }
 
     result.duration = Date.now() - startTime;
-    console.log(`🏁 Dependency loading completed in ${result.duration}ms. Success: ${result.success}`);
+    console.log(
+      `🏁 Dependency loading completed in ${result.duration}ms. Success: ${result.success}`
+    );
 
     return result;
   }
@@ -134,7 +142,7 @@ export class DependencyLoader {
 
     try {
       await loadingPromise;
-      
+
       // Run initialization function if provided
       if (dependency.initFunction) {
         await dependency.initFunction();
@@ -142,7 +150,6 @@ export class DependencyLoader {
 
       this.loaded.add(name);
       this.loading.delete(name);
-
     } catch (error) {
       this.loading.delete(name);
       throw error;
@@ -193,7 +200,8 @@ export class DependencyLoader {
           errors.push('ParsonsWidget cannot be instantiated');
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         errors.push(`ParsonsWidget instantiation failed: ${errorMessage}`);
       }
     }
@@ -227,7 +235,7 @@ export class DependencyLoader {
   }
 
   private async loadCSS(): Promise<void> {
-    const promises = CSS_DEPENDENCIES.map(href => this.loadCSSFile(href));
+    const promises = CSS_DEPENDENCIES.map((href) => this.loadCSSFile(href));
     await Promise.all(promises);
   }
 
@@ -242,10 +250,10 @@ export class DependencyLoader {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = href;
-      
+
       link.onload = () => resolve();
       link.onerror = () => reject(new Error(`Failed to load CSS: ${href}`));
-      
+
       document.head.appendChild(link);
     });
   }
@@ -262,7 +270,7 @@ export class DependencyLoader {
       }
 
       visiting.add(name);
-      
+
       const dep = DEPENDENCY_MANIFEST[name];
       if (dep?.dependencies) {
         for (const depName of dep.dependencies) {
@@ -283,7 +291,9 @@ export class DependencyLoader {
     return order;
   }
 
-  private async loadDependencyScript(dependency: DependencyDefinition): Promise<void> {
+  private async loadDependencyScript(
+    dependency: DependencyDefinition
+  ): Promise<void> {
     let lastError: Error | null = null;
 
     // Try main source
@@ -292,7 +302,10 @@ export class DependencyLoader {
       return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(`Failed to load ${dependency.name} from main source:`, error);
+      console.warn(
+        `Failed to load ${dependency.name} from main source:`,
+        error
+      );
     }
 
     // Try fallback if available and enabled
@@ -315,10 +328,10 @@ export class DependencyLoader {
       case 'cdn':
       case 'local':
         return this.loadScriptFromURL(source.url!);
-      
+
       case 'dynamic':
         return this.loadDynamicModule(source.module!);
-        
+
       default:
         throw new Error(`Unknown source type: ${source.type}`);
     }

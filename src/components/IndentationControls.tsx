@@ -38,7 +38,8 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
       .split('\n')
       .filter((line) => line.trim() && !line.includes('#distractor'));
 
-    currentSolution.forEach((block) => {      if (block.isCombined && block.subLines) {
+    currentSolution.forEach((block) => {
+      if (block.isCombined && block.subLines) {
         block.subLines.forEach((subLine, subIndex) => {
           const subLineRelativeIndent = Math.floor(
             (subLine.match(/^(\s*)/)?.[1].length || 0) / 4
@@ -52,14 +53,16 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
           const matchingExpectedLine = allCorrectLines.find(
             (expectedLine) => expectedLine.trim() === cleanSubLine
           );
-          
+
           if (matchingExpectedLine) {
             // Use the original indented line from the correct solution
             expectedLines.push(matchingExpectedLine);
           } else {
             // Fallback: preserve the original subLine structure if it has indentation
             const originalIndent = subLine.match(/^(\s*)/)?.[1] || '';
-            const fallbackLine = originalIndent ? subLine : `${indentString}${cleanSubLine}`;
+            const fallbackLine = originalIndent
+              ? subLine
+              : `${indentString}${cleanSubLine}`;
             expectedLines.push(fallbackLine);
           }
 
@@ -75,7 +78,9 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
         const matchingExpectedLine = allCorrectLines.find(
           (expectedLine) => expectedLine.trim() === block.text.trim()
         );
-        expectedLines.push(matchingExpectedLine || `${indentString}${block.text}`);
+        expectedLines.push(
+          matchingExpectedLine || `${indentString}${block.text}`
+        );
 
         lineToBlockMapping.push({
           blockId: block.id,
@@ -92,15 +97,20 @@ const IndentationControls: React.FC<IndentationControlsProps> = ({
   const blockMetadata = currentSolution.reduce((metadata, block) => {
     if (block.groupId) {
       // Convert groupId to string if it's a number
-      const groupIdStr = typeof block.groupId === 'number' 
-        ? block.groupId.toString() 
-        : block.groupId;
+      const groupIdStr =
+        typeof block.groupId === 'number'
+          ? block.groupId.toString()
+          : block.groupId;
       metadata[block.id] = { groupId: groupIdStr };
     }
     return metadata;
   }, {} as { [id: string]: { groupId?: string } });
-  
-  const hints = generateIndentationHints(currentLines, expectedLines, blockMetadata);
+
+  const hints = generateIndentationHints(
+    currentLines,
+    expectedLines,
+    blockMetadata
+  );
 
   // Update both context and userSolution when indentation changes
   const updateSolutionAndContext = (updatedBlocks: BlockItem[]) => {

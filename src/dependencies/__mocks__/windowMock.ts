@@ -3,24 +3,24 @@ Object.defineProperty(global, 'window', {
   value: {
     $: {
       fn: {
-        jquery: '3.6.0'
+        jquery: '3.6.0',
       },
       ui: {
         version: '1.13.2',
-        sortable: true
+        sortable: true,
       },
       sortable: () => ({
-        sortable: jest.fn()
-      })
+        sortable: jest.fn(),
+      }),
     },
     jQuery: {
       fn: {
-        jquery: '3.6.0'
+        jquery: '3.6.0',
       },
       ui: {
         version: '1.13.2',
-        sortable: true
-      }
+        sortable: true,
+      },
     },
     _: {
       VERSION: '4.17.21',
@@ -29,35 +29,35 @@ Object.defineProperty(global, 'window', {
       map: jest.fn(),
       max: jest.fn(),
       last: jest.fn(),
-      difference: jest.fn()
+      difference: jest.fn(),
     },
     LIS: {
       patience_sort: jest.fn(() => []),
       find_lises: jest.fn(),
       best_lise: jest.fn(),
       best_lise_inverse: jest.fn(),
-      best_lise_inverse_indices: jest.fn()
+      best_lise_inverse_indices: jest.fn(),
     },
     ParsonsWidget: jest.fn(() => ({
-      init: jest.fn()
+      init: jest.fn(),
     })),
     location: {
-      origin: 'http://localhost:3000'
+      origin: 'http://localhost:3000',
     },
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
     dispatchEvent: jest.fn(),
     setTimeout: jest.fn(),
-    clearTimeout: jest.fn()
+    clearTimeout: jest.fn(),
   },
-  writable: true
+  writable: true,
 });
 
 // Mock document object
 Object.defineProperty(global, 'document', {
   value: {
     head: {
-      appendChild: jest.fn()
+      appendChild: jest.fn(),
     },
     createElement: jest.fn(() => ({
       async: false,
@@ -67,9 +67,9 @@ Object.defineProperty(global, 'document', {
       rel: null,
       href: null,
       src: null,
-      remove: jest.fn()
+      remove: jest.fn(),
     })),
-    querySelector: jest.fn(() => null)
+    querySelector: jest.fn(() => null),
   },
-  writable: true
+  writable: true,
 });

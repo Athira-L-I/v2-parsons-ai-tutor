@@ -73,11 +73,11 @@ const ParsonsPuzzleInner: React.FC<ParsonsPuzzleIntegratedProps> = ({
 };
 
 // Wrap with dependency loader
-const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = (props) => {
+const ParsonsPuzzleIntegrated: React.FC<ParsonsPuzzleIntegratedProps> = (
+  props
+) => {
   return (
-    <DependencyLoader 
-      showDetails={process.env.NODE_ENV === 'development'}
-    >
+    <DependencyLoader showDetails={process.env.NODE_ENV === 'development'}>
       <ParsonsPuzzleInner {...props} />
     </DependencyLoader>
   );

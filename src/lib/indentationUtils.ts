@@ -2,7 +2,7 @@
  * Shared utility functions for indentation validation used by both
  * the ValidationEngine and the real-time indentation hints.
  */
-import { SolutionBlock } from "../validation/types";
+import { SolutionBlock } from '../validation/types';
 
 export interface IndentationIssue {
   blockId: string;
@@ -36,8 +36,10 @@ export function validateGroupIndentationRelationships(
       const currentBlock = blocks[i];
 
       // Calculate the expected indentation difference between these blocks
-      const expectedDiff = getIndentLevel(currentBlock) - getIndentLevel(prevBlock);
-      const actualDiff = getIndentLevel(currentBlock) - getIndentLevel(prevBlock);
+      const expectedDiff =
+        getIndentLevel(currentBlock) - getIndentLevel(prevBlock);
+      const actualDiff =
+        getIndentLevel(currentBlock) - getIndentLevel(prevBlock);
 
       if (expectedDiff !== actualDiff) {
         issues.push({
@@ -49,9 +51,9 @@ export function validateGroupIndentationRelationships(
             expectedDiff > actualDiff ? 'be indented more' : 'be indented less'
           } relative to the previous line.`,
           // Only include lineIndex if requested
-          ...(includeLineIndices && 'lineIndex' in currentBlock 
-              ? { lineIndex: currentBlock.lineIndex } 
-              : {})
+          ...(includeLineIndices && 'lineIndex' in currentBlock
+            ? { lineIndex: currentBlock.lineIndex }
+            : {}),
         });
       }
     }

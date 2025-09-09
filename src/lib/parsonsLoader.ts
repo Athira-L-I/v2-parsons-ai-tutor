@@ -1,7 +1,7 @@
 /**
  * Updated Parsons Loader with modern dependency management
  * src/lib/parsonsLoader.ts
- * 
+ *
  * This file provides backwards compatibility with the old parsonsLoader API
  * while using the new dependency management system under the hood
  */
@@ -19,20 +19,27 @@ let lastLoadError: Error | null = null;
  */
 export async function loadParsonsWidget(): Promise<void> {
   loadAttempts++;
-  console.log(`🚀 Starting Parsons widget dependency loading (attempt ${loadAttempts})...`);
+  console.log(
+    `🚀 Starting Parsons widget dependency loading (attempt ${loadAttempts})...`
+  );
 
   try {
     const result = await dependencyLoader.loadAll();
-    
+
     if (!result.success) {
-      const error = new Error(`Failed to load dependencies: ${result.errors.join(', ')}`);
+      const error = new Error(
+        `Failed to load dependencies: ${result.errors.join(', ')}`
+      );
       lastLoadError = error;
       throw error;
     }
-    
+
     return Promise.resolve();
   } catch (error) {
-    console.error(`❌ Error loading Parsons widget dependencies (attempt ${loadAttempts}):`, error);
+    console.error(
+      `❌ Error loading Parsons widget dependencies (attempt ${loadAttempts}):`,
+      error
+    );
     lastLoadError = error instanceof Error ? error : new Error(String(error));
     throw error;
   }
@@ -44,11 +51,11 @@ export async function loadParsonsWidget(): Promise<void> {
 export function isParsonsWidgetLoaded(): boolean {
   const status = dependencyLoader.getStatus();
   const isLoaded = status.loaded.includes('parsonsWidget');
-  
+
   if (!isLoaded) {
     return false;
   }
-  
+
   // Additional verification
   return (
     typeof window !== 'undefined' &&
@@ -73,7 +80,7 @@ export function getLastLoadError(): Error | null {
  */
 export function getLoadingStatus() {
   const status = dependencyLoader.getStatus();
-  
+
   return {
     isLoading: status.loading.length > 0,
     isLoaded: status.loaded.includes('parsonsWidget'),
@@ -86,10 +93,12 @@ export function getLoadingStatus() {
       fullVerification: status.loaded.includes(key),
       src: dep.source.url || '',
     })),
-    verification: status.loaded.includes('parsonsWidget') ? { 
-      success: true,
-      details: status.loaded.map(dep => `✅ ${dep}: Loaded`)
-    } : null,
+    verification: status.loaded.includes('parsonsWidget')
+      ? {
+          success: true,
+          details: status.loaded.map((dep) => `✅ ${dep}: Loaded`),
+        }
+      : null,
   };
 }
 
@@ -123,31 +132,37 @@ export function diagnoseDependencyIssues(): {
   const status = dependencyLoader.getStatus();
   const issues: string[] = [];
   const suggestions: string[] = [];
-  
+
   // Check each dependency
   Object.entries(DEPENDENCY_MANIFEST).forEach(([key, dep]) => {
     if (!status.loaded.includes(key)) {
       issues.push(`${dep.name} is not loaded`);
-      
+
       if (dep.source.url?.startsWith('/js/')) {
-        suggestions.push(`Check that ${dep.source.url} exists in your public directory`);
-        suggestions.push(`Verify the file is accessible at ${window.location.origin}${dep.source.url}`);
+        suggestions.push(
+          `Check that ${dep.source.url} exists in your public directory`
+        );
+        suggestions.push(
+          `Verify the file is accessible at ${window.location.origin}${dep.source.url}`
+        );
       } else if (dep.source.url?.startsWith('http')) {
-        suggestions.push(`Check internet connection for external dependency: ${dep.name}`);
+        suggestions.push(
+          `Check internet connection for external dependency: ${dep.name}`
+        );
       }
     }
   });
-  
+
   // Check for browser compatibility
   if (typeof window === 'undefined' || typeof Promise === 'undefined') {
     issues.push('Browser does not support required features');
     suggestions.push('Use a modern browser that supports ES6 features');
   }
-  
-  return { 
-    issues, 
-    suggestions, 
-    canRetry: true 
+
+  return {
+    issues,
+    suggestions,
+    canRetry: true,
   };
 }
 
